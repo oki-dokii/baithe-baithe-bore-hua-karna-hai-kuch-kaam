@@ -1,11 +1,11 @@
 # Implementation backlog
 
-All rows except Phase 0 are unstarted. Schedule after team capacity and deadline are known. Build one complete mud-loss path before expanding hazard scenarios.
+Phases 0 and 1 are complete. Phases 2–6 remain unstarted. Schedule after team capacity and deadline are known. Build one complete mud-loss path before expanding hazard scenarios. See the [Phase 1 implementation record](../phase-1/README.md).
 
 | Phase | Deliverables in dependency order | Exit check |
 |---|---|---|
 | 0 — Specification | Scope; architecture decisions; logical schema; API/UI contracts; synthetic fixture; data register | These documents and fixture are internally checked and committed |
-| 1 — Foundation | Pin dependencies; Compose with database/API/worker/frontend; extension-enabled image; physical migrations; typed API/OpenAPI; config validation; local identity/roles; fixture loader | Fresh setup works; migrations and seed load are repeatable; DB constraints reject malformed fixtures; status reports SIMULATED/no model |
+| 1 — Foundation (complete) | Pin dependencies; Compose with database/API/worker/frontend; extension-enabled image; physical migrations; typed API/OpenAPI; config validation; local identity/roles; fixture loader | Fresh setup works; migrations and seed load are repeatable; DB constraints reject malformed fixtures; status reports SIMULATED/no model |
 | 2 — Evidence ingestion | Storage/upload jobs; text/OCR adapters; strict extraction; normalization; typed evidence joins; review UI/audit; real-source qualification | ING-01/02/03 and review permissions; scanned/text evidence survives to a source page; report real-source gate status explicitly |
 | 3 — Well intelligence | Radius search; wells/map view; formation/survey mapping; analog scoring; case file; filtered and semantic retrieval | MAP-01, COR-01/02, RET-01/02 pass on golden and negative fixtures |
 | 4 — Operations loop | Replay sessions; deterministic alerts; transactional dedup; lifecycle; dashboard; feedback; minimal field view | ALR-01/02/03, UX-01/02, FBK-01 pass across full replay and reconnect; no model required |
@@ -33,4 +33,4 @@ All rows except Phase 0 are unstarted. Schedule after team capacity and deadline
 - Do not commit raw reports/datasets, generated binaries or private logs. Small owned synthetic fixtures are allowed.
 - No production, predictive-accuracy, avoided-NPT or cost-saving claim without supporting evaluation.
 
-Phase 0 does not start application development or install dependencies. Phase 1 is the next implementation scope.
+Phase 2, evidence ingestion and review, is the next implementation scope.
