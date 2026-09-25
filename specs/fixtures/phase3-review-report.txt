@@ -1,0 +1,11 @@
+SYNTHETIC PHASE 3 DEMONSTRATION — NOT REAL WELL DATA
+Wellbore: SYN-B-MAIN
+Datum: synthetic_reference
+Formation: SYN-F1
+
+Mud losses occurred from 1930 to 1940 m MD.
+
+This owned fictional report is for testing only. Upload against SYN-B-MAIN,
+inspect the source, and approve the candidate with a review rationale.
+The comparison target is SYN-A-MAIN / SYN-F1. The expected mapped interval
+is 2130 to 2140 m MD. No operational action is recommended.

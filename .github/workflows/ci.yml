@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr
           docker compose stop worker
           uv sync --frozen --extra dev
-          uv run --frozen --extra dev pytest -q tests/test_ingestion_integration.py
+          uv run --frozen --extra dev pytest -q tests/test_ingestion_integration.py tests/test_intelligence_integration.py
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs --no-color --tail=100

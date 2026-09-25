@@ -14,9 +14,11 @@ from nwis.schemas import ComponentStatus, SeedResponse, SystemStatus, WellPage, 
 from nwis.security import Principal, current_principal, require_role
 from nwis.seed import load_fixture
 from nwis.ingestion.api import router as ingestion_router
+from nwis.intelligence import router as intelligence_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
 app.include_router(ingestion_router)
+app.include_router(intelligence_router)
 _fixture_path = Path("/app/specs/fixtures/golden-demo.json")
 
 

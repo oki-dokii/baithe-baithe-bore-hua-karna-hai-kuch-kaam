@@ -1,6 +1,6 @@
 # Implementation backlog
 
-Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public-source qualification and live-provider validation open; see its [implementation record](../phase-2/README.md). Phases 3–6 remain unstarted. Build one complete mud-loss path before expanding hazard scenarios.
+Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public-source qualification and live-provider validation open; see its [implementation record](../phase-2/README.md). Phase 3 core well intelligence is implemented with semantic retrieval still open. Phases 4–6 remain unstarted. Build one complete mud-loss path before expanding hazard scenarios.
 
 | Phase | Deliverables in dependency order | Exit check |
 |---|---|---|
@@ -33,4 +33,4 @@ Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public
 - Do not commit raw reports/datasets, generated binaries or private logs. Small owned synthetic fixtures are allowed.
 - No production, predictive-accuracy, avoided-NPT or cost-saving claim without supporting evaluation.
 
-Next: close the Phase 2 real-source/provider gates and then implement Phase 3 well intelligence. Do not present synthetic test coverage as real-report validation.
+Phase 3 core map, comparison, case file and filtered full-text search are implemented; see the [Phase 3 record](../phase-3/README.md). Semantic retrieval remains open, as do Phase 2's real-source/provider gates. Do not present synthetic test coverage as real-report validation or full-text search as semantic retrieval.
