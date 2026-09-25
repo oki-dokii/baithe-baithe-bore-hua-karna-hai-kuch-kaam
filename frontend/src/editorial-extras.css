@@ -1,0 +1,24 @@
+.manual-entry {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding: 18px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.manual-entry > summary {
+  cursor: pointer;
+}
+.candidate-selector {
+  max-width: calc(100% - 36px);
+}
+@media (min-width: 851px) {
+  .review-layout { height: 780px; }
+  .report-index, .source-panel, .evidence-panel { height: 100%; overflow: auto; }
+  .report-index { padding-bottom: 0; }
+  .index-note { position: static; padding: 20px; }
+  .panel-heading { position: sticky; top: 0; background: var(--paper); z-index: 1; }
+}
+@media (max-width: 560px) {
+  .report-entry strong { display: block; margin: 7px 0; }
+  .report-entry small { display: block; margin: 7px 0; }
+}

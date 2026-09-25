@@ -13,7 +13,7 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${NWIS_DB_PORT:-5432}:5432"
 
   migrate:
     build: ./backend
@@ -25,6 +25,11 @@ services:
       NWIS_ENGINEER_TOKEN: ${NWIS_ENGINEER_TOKEN:?Set NWIS_ENGINEER_TOKEN in .env}
       NWIS_REVIEWER_TOKEN: ${NWIS_REVIEWER_TOKEN:?Set NWIS_REVIEWER_TOKEN in .env}
       NWIS_ADMIN_TOKEN: ${NWIS_ADMIN_TOKEN:?Set NWIS_ADMIN_TOKEN in .env}
+      NWIS_STORAGE_ROOT: /app/storage
+      NWIS_EXTRACTION_PROVIDER: ${NWIS_EXTRACTION_PROVIDER:-local_rules}
+      NWIS_LLM_BASE_URL: ${NWIS_LLM_BASE_URL:-https://api.openai.com/v1}
+      NWIS_LLM_MODEL: ${NWIS_LLM_MODEL:-}
+      NWIS_LLM_API_KEY: ${NWIS_LLM_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +46,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./specs:/app/specs:ro
+      - document_storage:/app/storage
     ports:
       - "127.0.0.1:${NWIS_API_PORT:-8000}:8000"
     healthcheck:
@@ -58,6 +64,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./specs:/app/specs:ro
+      - document_storage:/app/storage
 
   web:
     build: ./frontend
@@ -71,3 +78,4 @@ services:
 
 volumes:
   postgres_data:
+  document_storage:

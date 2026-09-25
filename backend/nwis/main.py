@@ -13,13 +13,18 @@ from nwis.db import connection
 from nwis.schemas import ComponentStatus, SeedResponse, SystemStatus, WellPage, WellSummary
 from nwis.security import Principal, current_principal, require_role
 from nwis.seed import load_fixture
+from nwis.ingestion.api import router as ingestion_router
 
-app = FastAPI(title="NWIS API", version="0.1.0", description="Phase 1 foundation API")
+app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
+app.include_router(ingestion_router)
 _fixture_path = Path("/app/specs/fixtures/golden-demo.json")
 
 
 def error(code: str, message: str, request_id: str, details: dict | None = None) -> dict:
-    return {"error": {"code": code, "message": message, "details": details or {}}, "request_id": request_id}
+    return {
+        "error": {"code": code, "message": message, "details": details or {}},
+        "request_id": request_id,
+    }
 
 
 @app.middleware("http")
@@ -47,7 +52,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     fields = [".".join(str(part) for part in item["loc"]) for item in exc.errors()]
     return JSONResponse(
         status_code=422,
-        content=error("invalid_request", "Invalid request fields", request.state.request_id, {"fields": fields}),
+        content=error(
+            "invalid_request",
+            "Invalid request fields",
+            request.state.request_id,
+            {"fields": fields},
+        ),
     )
 
 
@@ -62,6 +72,7 @@ def system_status(_principal: Principal = Depends(current_principal)):
     database = ComponentStatus(state="degraded")
     spatial = ComponentStatus(state="unavailable")
     vector = ComponentStatus(state="unavailable")
+    ingestion = ComponentStatus(state="degraded", detail="Worker heartbeat unavailable")
     datasets: list[str] = []
     try:
         with connection() as conn:
@@ -74,7 +85,18 @@ def system_status(_principal: Principal = Depends(current_principal)):
             spatial = ComponentStatus(state="ready" if row["postgis"] else "unavailable")
             vector = ComponentStatus(state="ready" if row["vector"] else "unavailable")
             if row["migrated"]:
-                datasets = [r["kind"] for r in conn.execute("SELECT DISTINCT kind FROM dataset ORDER BY kind")]
+                datasets = [
+                    r["kind"]
+                    for r in conn.execute("SELECT DISTINCT kind FROM dataset ORDER BY kind")
+                ]
+                heartbeat = conn.execute("""SELECT last_seen_at > now() - interval '180 seconds' AS fresh
+                    FROM service_heartbeat WHERE service='ingestion'""").fetchone()
+                ingestion = ComponentStatus(
+                    state="ready" if heartbeat and heartbeat["fresh"] else "degraded",
+                    detail=f"Extraction: {settings.extraction_provider}; review required"
+                    if heartbeat and heartbeat["fresh"]
+                    else "Ingestion worker heartbeat missing or stale",
+                )
     except Exception:
         database = ComponentStatus(state="degraded", detail="Database connection unavailable")
     return SystemStatus(
@@ -83,7 +105,7 @@ def system_status(_principal: Principal = Depends(current_principal)):
         database=database,
         spatial=spatial,
         vector=vector,
-        ingestion=ComponentStatus(state="not_implemented", detail="Scheduled for Phase 2"),
+        ingestion=ingestion,
         replay=ComponentStatus(state="not_implemented", detail="Scheduled for Phase 4"),
         prediction=ComponentStatus(state="not_implemented", detail="No trained model"),
         datasets=datasets,
@@ -124,7 +146,9 @@ def wells(
     more = len(rows) > limit
     return WellPage(
         items=[WellSummary(**row) for row in rows[:limit]],
-        next_cursor=base64.urlsafe_b64encode(str(offset + limit).encode()).decode() if more else None,
+        next_cursor=base64.urlsafe_b64encode(str(offset + limit).encode()).decode()
+        if more
+        else None,
     )
 
 
@@ -136,7 +160,9 @@ def nearby_wells(
     _principal: Principal = Depends(current_principal),
 ):
     with connection() as conn:
-        active = conn.execute("SELECT id, dataset_id, surface_point FROM well WHERE id=%s", (active_well_id,)).fetchone()
+        active = conn.execute(
+            "SELECT id, dataset_id, surface_point FROM well WHERE id=%s", (active_well_id,)
+        ).fetchone()
         if active is None:
             raise HTTPException(status_code=404, detail="Active well not found")
         rows = conn.execute(

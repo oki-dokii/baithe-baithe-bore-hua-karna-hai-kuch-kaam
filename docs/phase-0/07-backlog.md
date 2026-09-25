@@ -1,6 +1,6 @@
 # Implementation backlog
 
-Phases 0 and 1 are complete. Phases 2–6 remain unstarted. Schedule after team capacity and deadline are known. Build one complete mud-loss path before expanding hazard scenarios. See the [Phase 1 implementation record](../phase-1/README.md).
+Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public-source qualification and live-provider validation open; see its [implementation record](../phase-2/README.md). Phases 3–6 remain unstarted. Build one complete mud-loss path before expanding hazard scenarios.
 
 | Phase | Deliverables in dependency order | Exit check |
 |---|---|---|
@@ -33,4 +33,4 @@ Phases 0 and 1 are complete. Phases 2–6 remain unstarted. Schedule after team 
 - Do not commit raw reports/datasets, generated binaries or private logs. Small owned synthetic fixtures are allowed.
 - No production, predictive-accuracy, avoided-NPT or cost-saving claim without supporting evaluation.
 
-Phase 2, evidence ingestion and review, is the next implementation scope.
+Next: close the Phase 2 real-source/provider gates and then implement Phase 3 well intelligence. Do not present synthetic test coverage as real-report validation.
