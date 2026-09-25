@@ -1,0 +1,101 @@
+{
+  "schema_version": "0.1.0",
+  "dataset_id": "nwis-synthetic-golden-v1",
+  "data_kind": "synthetic",
+  "description": "Fictional regression scenario. Not OIL records or empirical geology.",
+  "depth_unit": "m",
+  "coordinate_crs": "EPSG:4326",
+  "coordinate_order": "longitude_latitude",
+  "depth_reference": {
+    "kind": "synthetic_reference",
+    "elevation_above_msl_m": 0,
+    "all_wells_vertical": true,
+    "md_equals_tvd": true
+  },
+  "config": {
+    "radius_km": 5,
+    "lookahead_m": 100,
+    "episode_band_m": 50,
+    "notification_cooldown_s": 300,
+    "telemetry_stale_after_s": 15,
+    "model_available": false
+  },
+  "active_well_id": "SYN-A",
+  "wells": [
+    {
+      "id": "SYN-A",
+      "wellbore_id": "SYN-A-MAIN",
+      "point": [95.0, 27.0],
+      "formation": {"id": "SYN-F1", "interval_id": "A-F1", "top_m": 2000, "base_m": 2300},
+      "survey": [{"md_m": 0, "tvd_m": 0}, {"md_m": 2500, "tvd_m": 2500}]
+    },
+    {
+      "id": "SYN-B",
+      "wellbore_id": "SYN-B-MAIN",
+      "point": [95.01, 27.0],
+      "formation": {"id": "SYN-F1", "interval_id": "B-F1", "top_m": 1800, "base_m": 2100},
+      "survey": [{"md_m": 0, "tvd_m": 0}, {"md_m": 2500, "tvd_m": 2500}]
+    },
+    {
+      "id": "SYN-C",
+      "wellbore_id": "SYN-C-MAIN",
+      "point": [95.02, 27.0],
+      "formation": {"id": "SYN-F2", "interval_id": "C-F2", "top_m": 1800, "base_m": 2100},
+      "survey": [{"md_m": 0, "tvd_m": 0}, {"md_m": 2500, "tvd_m": 2500}]
+    },
+    {
+      "id": "SYN-D",
+      "wellbore_id": "SYN-D-MAIN",
+      "point": [95.20, 27.0],
+      "formation": {"id": "SYN-F1", "interval_id": "D-F1", "top_m": 1800, "base_m": 2100},
+      "survey": [{"md_m": 0, "tvd_m": 0}, {"md_m": 2500, "tvd_m": 2500}]
+    }
+  ],
+  "documents": [
+    {
+      "id": "SYN-DDR-B-001",
+      "wellbore_id": "SYN-B-MAIN",
+      "data_kind": "synthetic",
+      "pages": [
+        {
+          "page_number": 1,
+          "section": "Fictional drilling events",
+          "text": "SYNTHETIC REPORT. Well SYN-B, vertical, depth in metres from synthetic reference at 0 m MSL. Formation SYN-F1 spans 1800 to 2100 m. Mud losses occurred from 1930 to 1940 m MD. Operations paused for engineering review; mitigation details were not recorded. Outcome remains unknown. Reported NPT was 6 hours."
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "SYN-E-B-001",
+      "wellbore_id": "SYN-B-MAIN",
+      "formation_interval_id": "B-F1",
+      "event_type": "mud_loss",
+      "start_md_m": 1930,
+      "end_md_m": 1940,
+      "severity": null,
+      "initial_review_state": "draft",
+      "post_review_state": "approved",
+      "document_id": "SYN-DDR-B-001",
+      "page_number": 1,
+      "npt_duration_h": 6,
+      "recorded_action": "Operations paused for engineering review",
+      "outcome": "unknown"
+    }
+  ],
+  "expected": {
+    "nearby_well_ids": ["SYN-B", "SYN-C"],
+    "eligible_support_well_ids": ["SYN-B"],
+    "mapped_event_start_md_m": 2130,
+    "mapped_event_end_md_m": 2140,
+    "risk_score": null,
+    "risk_reason": "model_not_available",
+    "replay_checks_after_approval": [
+      {"md_m": 2029, "new_alert_count": 0, "total_episode_count": 0},
+      {"md_m": 2030, "new_alert_count": 1, "total_episode_count": 1},
+      {"md_m": 2030, "new_alert_count": 0, "total_episode_count": 1},
+      {"md_m": 2031, "new_alert_count": 0, "total_episode_count": 1},
+      {"md_m": 2141, "new_alert_count": 0, "total_episode_count": 1, "relevance": "passed"}
+    ]
+  }
+}
