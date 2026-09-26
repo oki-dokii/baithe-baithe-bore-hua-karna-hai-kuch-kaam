@@ -1,0 +1,238 @@
+.atlas-controls {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 28px;
+  padding: 20px 0 30px;
+  border-top: 1px solid var(--line);
+}
+.atlas-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  border: 1px solid var(--line);
+}
+.well-map {
+  height: 420px;
+  background: #e9eddf;
+  z-index: 0;
+}
+.map-caption {
+  display: flex;
+  justify-content: space-between;
+  padding: 13px 18px;
+  font: 10px monospace;
+  color: var(--muted);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.leaflet-tooltip {
+  font:
+    11px Arial,
+    sans-serif;
+  box-shadow: none;
+  border: 1px solid #d3d5c9;
+  border-radius: 1px;
+  background: #fbfaf5;
+  color: #272c27;
+}
+.analogue-index {
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+  max-height: 470px;
+  overflow: auto;
+}
+.analogue-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  width: 100%;
+  background: none;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  padding: 20px;
+  text-align: left;
+  gap: 10px;
+}
+.analogue-row.selected {
+  border-left-color: var(--accent);
+  background: #e9eddf;
+}
+.analogue-row small {
+  grid-column: 1/-1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.comparison-panel,
+.knowledge-search,
+.case-panel {
+  margin-top: 30px;
+  padding: 25px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.comparison-panel h3,
+.case-panel h3 {
+  font-size: 12px;
+  margin-top: 24px;
+}
+.score-explanation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 15px 0;
+  font: 11px monospace;
+  color: var(--muted);
+}
+.mapping-table {
+  overflow: auto;
+}
+.mapping-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.mapping-table th,
+.mapping-table td {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: 15px 12px;
+  line-height: 1.6;
+}
+.mapping-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.unresolved {
+  color: #805a24;
+}
+.knowledge-search h2 {
+  font:
+    34px Georgia,
+    serif;
+  letter-spacing: -0.025em;
+  font-weight: 400;
+}
+.search-primary {
+  display: flex;
+  gap: 10px;
+  margin: 25px 0 10px;
+}
+.search-primary input {
+  flex: 1;
+  min-width: 0;
+}
+.search-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 20px;
+  align-items: end;
+}
+.search-hit {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.search-hit:first-child {
+  margin-top: 25px;
+}
+.search-hit small {
+  color: var(--muted);
+}
+.case-panel {
+  border-top: 2px solid var(--accent);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.case-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+}
+.citation-link {
+  display: block;
+  background: none;
+  color: var(--accent);
+  border: 0;
+  padding: 10px 0;
+  text-align: left;
+  text-decoration: underline;
+  font-size: 12px;
+}
+.case-source {
+  padding: 25px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: #fffefb;
+}
+.case-source pre {
+  font: 12px/1.8 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.intelligence-workspace .leaflet-control-zoom a {
+  color: var(--ink);
+  background: var(--paper);
+}
+@media (max-width: 800px) {
+  .atlas-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  .atlas-controls > div:last-child {
+    grid-column: 1/-1;
+  }
+  .atlas-grid {
+    grid-template-columns: 1fr;
+  }
+  .analogue-index {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    max-height: 260px;
+  }
+  .search-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .case-facts {
+    grid-template-columns: 1fr;
+  }
+  .map-caption {
+    font-size: 9px;
+  }
+  .well-map {
+    height: 330px;
+  }
+}
+@media (max-width: 500px) {
+  .atlas-controls {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .comparison-panel,
+  .knowledge-search,
+  .case-panel {
+    padding: 18px;
+  }
+  .search-primary {
+    flex-direction: column;
+  }
+  .search-hit {
+    display: block;
+  }
+  .score-explanation {
+    line-height: 1.7;
+  }
+  .section-heading {
+    flex-wrap: wrap;
+  }
+  .mapping-table td {
+    min-width: 125px;
+  }
+  .case-source {
+    padding: 15px;
+  }
+}

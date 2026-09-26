@@ -21,6 +21,7 @@ try {
     .getByLabel("Local access token")
     .fill(process.env.NWIS_REVIEWER_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByRole("button", { name: "Evidence room" }).click();
   await page.getByRole("heading", { name: "The evidence room." }).waitFor();
   await page.getByRole("button", { name: "+ Add a report" }).click();
   await page
@@ -38,7 +39,9 @@ try {
     .getByLabel("Review rationale")
     .fill("Verified the exact source quote in this fictional UI test.");
   await page.getByRole("checkbox").check();
-  await page.locator('.evidence-panel').evaluate(element => { element.scrollTop = 0; });
+  await page.locator(".evidence-panel").evaluate((element) => {
+    element.scrollTop = 0;
+  });
   await page.screenshot({
     path: "artifacts/evidence-desktop.png",
     fullPage: true,

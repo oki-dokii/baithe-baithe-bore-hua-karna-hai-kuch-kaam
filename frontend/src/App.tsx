@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import Documents from "./Documents";
+import Intelligence from "./Intelligence";
 
 type Component = { state: string; detail: string | null };
 type Status = {
@@ -55,7 +56,9 @@ export default function App() {
   const [radius, setRadius] = useState(5);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<"documents" | "foundation">("documents");
+  const [view, setView] = useState<"documents" | "intelligence" | "foundation">(
+    "intelligence",
+  );
 
   useEffect(() => {
     if (!entered) return;
@@ -198,14 +201,22 @@ export default function App() {
                 01 <span>Evidence room</span>
               </button>
               <button
+                className={view === "intelligence" ? "active" : ""}
+                onClick={() => setView("intelligence")}
+              >
+                02 <span>Well intelligence</span>
+              </button>
+              <button
                 className={view === "foundation" ? "active" : ""}
                 onClick={() => setView("foundation")}
               >
-                02 <span>Well directory</span>
+                03 <span>Well directory</span>
               </button>
             </nav>
             {view === "documents" ? (
               <Documents token={entered} />
+            ) : view === "intelligence" ? (
+              <Intelligence token={entered} />
             ) : (
               <>
                 <div className="statusline">

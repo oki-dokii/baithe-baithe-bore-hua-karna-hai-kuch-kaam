@@ -2,7 +2,7 @@
 
 NWIS is a proposed decision-support platform for Oil India Limited's SIH problem statement. It connects historical drilling reports, nearby wells, formation correlation, and proactive hazard alerts alongside eRTMAC.
 
-**Status: Phase 2 implementation, with real-data validation still open.** Report upload, PDF/text extraction, OCR, source-page evidence and audited human review are implemented alongside the Phase 1 foundation. The default extractor is a disclosed rule-based baseline, not a trained model. Correlation, retrieval, alerts and predictive ML remain later phases. See the [Phase 2 implementation and limitations](docs/phase-2/README.md).
+**Status: Phase 3 core implementation, with validation/model gates open.** Report ingestion and audited review now feed an offset-well map, conservative formation-relative comparisons, case files and approved full-text evidence search. The default extractor is rule-based; semantic embeddings, real-report validation, alerts and predictive ML are not complete. See [Phase 2](docs/phase-2/README.md) and [Phase 3 implementation and limitations](docs/phase-3/README.md).
 
 Repository: https://github.com/oki-dokii/baithe-baithe-bore-hua-karna-hai-kuch-kaam
 
