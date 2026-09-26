@@ -45,6 +45,7 @@ type Snapshot = {
   risk_reason: string;
   steps_total: number;
   replay_worker_ready: boolean;
+  transport?: string;
 };
 const human = (s: string) => s.replaceAll("_", " ");
 async function api<T>(token: string, path: string, body?: unknown): Promise<T> {
@@ -270,6 +271,7 @@ export default function Operations({ token }: { token: string }) {
   const [role, setRole] = useState("viewer");
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [streamConnected, setStreamConnected] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [clock, setClock] = useState(Date.now());
@@ -289,6 +291,51 @@ export default function Operations({ token }: { token: string }) {
     };
   }, [token]);
   useEffect(() => {
+    if (!selected || !token || typeof WebSocket === "undefined") return;
+    let active = true;
+    let socket: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    setStreamConnected(false);
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${protocol}//${location.host}/api/v1/replay-sessions/${selected}/stream`;
+    function connect() {
+      if (!active) return;
+      let current: WebSocket;
+      try {
+        current = new WebSocket(url);
+        socket = current;
+      } catch {
+        retry = setTimeout(connect, 5000);
+        return;
+      }
+      current.onopen = () => current.send(JSON.stringify({ token }));
+      current.onmessage = (event) => {
+        try {
+          const next = JSON.parse(event.data) as Snapshot;
+          if (next.session?.id !== selected) return;
+          setData(next);
+          setStreamConnected(true);
+          setOffline(false);
+          setError("");
+        } catch {
+          current.close();
+        }
+      };
+      current.onerror = () => current.close();
+      current.onclose = () => {
+        if (!active) return;
+        setStreamConnected(false);
+        retry = setTimeout(connect, 5000);
+      };
+    }
+    connect();
+    return () => {
+      active = false;
+      if (retry) clearTimeout(retry);
+      socket?.close();
+    };
+  }, [token, selected]);
+  useEffect(() => {
     let active = true;
     async function load() {
       try {
@@ -296,7 +343,7 @@ export default function Operations({ token }: { token: string }) {
         if (!active) return;
         setSessions(list);
         if (!selected && list.length) setSelected(list[0].id);
-        if (selected) {
+        if (selected && !streamConnected) {
           const next = await api<Snapshot>(
             token,
             `/replay-sessions/${selected}`,
@@ -312,12 +359,12 @@ export default function Operations({ token }: { token: string }) {
       }
     }
     void load();
-    const timer = setInterval(load, 1500);
+    const timer = setInterval(load, streamConnected ? 5000 : 1500);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [token, selected, revision]);
+  }, [token, selected, revision, streamConnected]);
   async function create() {
     setBusy(true);
     setError("");
@@ -450,6 +497,9 @@ export default function Operations({ token }: { token: string }) {
               <p>
                 State: {data.session.state} · step {data.session.next_sequence}/
                 {data.steps_total}
+              </p>
+              <p>
+                Transport: {streamConnected ? "WebSocket snapshots" : "HTTP reconnect fallback"}
               </p>
             </div>
             <div>

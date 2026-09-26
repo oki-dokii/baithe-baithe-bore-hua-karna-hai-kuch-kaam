@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 from psycopg.types.json import Jsonb
 
 from nwis.config import get_settings
@@ -97,6 +98,18 @@ def test_replay_alert_lifecycle_idempotency_and_stale_receipt():
         assert step().json()["md_m"] == 2141
         data = snap()
         assert len(data["alerts"]) == 1 and data["session"]["state"] == "completed"
+        with client.websocket_connect("/api/v1" + path + "/stream") as stream:
+            stream.send_json({"token": settings.viewer_token})
+            streamed = stream.receive_json()
+            assert streamed["session"]["id"] == session_id
+            assert streamed["session"]["state"] == "completed"
+            assert streamed["transport"] == "websocket_snapshot_stream"
+            assert len(streamed["alerts"]) == 1
+        with client.websocket_connect("/api/v1" + path + "/stream") as stream:
+            stream.send_json({"token": "not-a-valid-token"})
+            with pytest.raises(WebSocketDisconnect) as denied:
+                stream.receive_json()
+            assert denied.value.code == 4401
         assert (
             data["alerts"][0]["relevance"] == "passed"
             and data["alerts"][0]["lifecycle"] == "ACKNOWLEDGED"
