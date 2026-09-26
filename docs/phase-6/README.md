@@ -23,9 +23,9 @@ The next honest demo gate is a fresh-install run plus recorded screenshots/API r
 
 ## Automated clean-database rehearsal
 
-The CI integration job starts Compose on a fresh runner, applies migrations, then runs `python -m nwis.demo_rehearsal` **before** the older integration smoke. The script refuses production or remote-extraction configuration and, by default, refuses any pre-existing dataset. It uses the owned `phase3-review-report.txt` to test fixture loading and repeatability, map radius, upload/extraction, reviewer approval, depth mapping, exact citation, filtered retrieval and no-support abstention. A new paused replay steps through 2029/2030/2030/2031/2141 m, checking the alert boundary, one cited episode and `risk_score: null`. Output is a small text-free JSON check summary; it does not print tokens or report passages. `--allow-existing` is for an explicitly chosen development database only and does **not** qualify as a fresh-install rehearsal.
+The CI integration job starts Compose on a fresh runner, applies migrations, then runs `python -m nwis.demo_rehearsal` **before** the older integration smoke. The script refuses production or remote-extraction configuration and any pre-existing dataset. It uses the owned `phase3-review-report.txt` to test fixture loading and repeatability, map radius, upload/extraction, reviewer approval, depth mapping, exact citation, filtered retrieval and no-support abstention. A new paused replay steps through 2029/2030/2030/2031/2141 m, checking the alert boundary, one cited episode and `risk_score: null`. Output is a small text-free JSON check summary; it does not print tokens or report passages.
 
-The CI check is a software demonstration with synthetic data, not a reviewed real-source extraction benchmark, an ML model, or eRTMAC connectivity. A browser walkthrough, visual screenshots and load/performance evidence remain separate gates. Do not run it on any production or mixed-use database.
+The CI check is a software demonstration with synthetic data, not a reviewed real-source extraction benchmark, an ML model, or eRTMAC connectivity. A browser walkthrough, visual screenshots and load/performance evidence remain separate gates. The command refuses any nonempty database; do not run it on a production or mixed-use database.
 
 ## Fixed-question retrieval evaluation
 

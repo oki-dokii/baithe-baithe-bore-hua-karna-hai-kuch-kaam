@@ -25,13 +25,13 @@ def checked(response, status=200):
     return response.json()
 
 
-def rehearse(require_empty=True):
+def rehearse():
     settings = get_settings()
     if settings.environment == "production" or settings.extraction_provider != "local_rules":
         raise ValueError("Demo rehearsal requires a non-production local-rules environment")
     with connection() as conn:
         existing = conn.execute("SELECT count(*) AS n FROM dataset").fetchone()["n"]
-    if require_empty and existing:
+    if existing:
         raise ValueError("Fresh rehearsal requires an empty migrated database")
 
     with TestClient(app) as client:
@@ -44,10 +44,7 @@ def rehearse(require_empty=True):
         admin = auth(settings.admin_token)
         assert client.get("/api/v1/status").status_code == 401
         seeded = checked(client.post("/api/v1/admin/fixtures/golden", headers=admin))
-        if require_empty:
-            assert seeded["wells"] == 4 and not seeded["repeated"]
-        else:
-            assert seeded["wells"] == 4 or seeded["repeated"]
+        assert seeded["wells"] == 4 and not seeded["repeated"]
         repeated = checked(client.post("/api/v1/admin/fixtures/golden", headers=admin))
         assert repeated["repeated"] and repeated["wells"] == 0
 
@@ -184,7 +181,7 @@ def rehearse(require_empty=True):
         return {
             "scenario": "golden-mud-loss-v1",
             "source_mode": "SIMULATED",
-            "fresh_database_required": require_empty,
+            "fresh_database_required": True,
             "ingestion_reviewed": True,
             "cited_event": True,
             "mapping_m": [2130, 2140],
@@ -198,9 +195,8 @@ def rehearse(require_empty=True):
 
 def main():
     parser = argparse.ArgumentParser(description="Run the owned synthetic demo end to end")
-    parser.add_argument("--allow-existing", action="store_true", help="Use a nonempty dev DB")
-    args = parser.parse_args()
-    print(json.dumps(rehearse(require_empty=not args.allow_existing), indent=2))
+    parser.parse_args()
+    print(json.dumps(rehearse(), indent=2))
 
 
 if __name__ == "__main__":
