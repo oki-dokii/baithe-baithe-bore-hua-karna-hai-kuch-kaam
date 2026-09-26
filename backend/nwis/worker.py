@@ -1,10 +1,11 @@
-"""Phase 1 worker process: validates DB connectivity and waits for future ingestion jobs."""
+"""Leased document ingestion worker."""
 
 import logging
 import signal
 import time
 
-from nwis.db import connection
+from nwis.config import get_settings
+from nwis.ingestion.jobs import tick
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _running = True
@@ -18,14 +19,14 @@ def stop(_signal, _frame) -> None:
 def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    logging.info("Worker started; ingestion handlers are scheduled for Phase 2")
+    logging.info("Document ingestion worker started")
     while _running:
         try:
-            with connection() as conn:
-                conn.execute("SELECT 1")
+            if tick():
+                continue
         except Exception:
             logging.exception("Worker database heartbeat failed")
-        for _ in range(10):
+        for _ in range(max(1, int(get_settings().worker_poll_s))):
             if not _running:
                 break
             time.sleep(1)

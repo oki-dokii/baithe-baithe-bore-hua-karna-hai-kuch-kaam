@@ -13,10 +13,12 @@ dependencies = [
   "pydantic-settings==2.9.1",
   "SQLAlchemy==2.0.41",
   "uvicorn==0.34.3",
+  "httpx==0.28.1",
+  "python-multipart==0.0.20",
 ]
 
 [project.optional-dependencies]
-dev = ["httpx==0.28.1", "pytest==8.4.1", "ruff==0.11.13"]
+dev = ["pytest==8.4.1", "ruff==0.11.13", "reportlab==4.4.3"]
 
 [tool.setuptools.packages.find]
 include = ["nwis*"]
