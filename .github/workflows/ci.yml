@@ -48,6 +48,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start services
         run: docker compose up --build -d --wait
+      - name: Rehearse synthetic demo on fresh migrated database
+        run: docker compose exec -T api python -m nwis.demo_rehearsal
       - name: Run integration smoke
         run: docker compose exec -T api python -m nwis.smoke
       - uses: actions/setup-python@v5
