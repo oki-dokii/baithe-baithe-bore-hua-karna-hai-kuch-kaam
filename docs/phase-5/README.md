@@ -22,7 +22,9 @@ The manifest records kind, source reference/checksum, permission reference and d
 
 All sidetracks and synthetic replicas must share the physical-well ID. The validator rejects known cross-split groups and inconsistent bore parents, duplicates, censored windows and unknown features. Two wells and both classes per split are only a structural floor, **not** a statistically sufficient sample size. The checks cannot discover incorrectly renamed wells or feature values that secretly contain future information.
 
-## Candidate data audit — 2026-09-26
+## Candidate data audit — 2026-09-27
+
+The [public dataset audit](dataset-candidates.md) recommends Utah FORGE for a source-qualification pilot and Volve as the petroleum-domain follow-up. Direct header inspection found useful 16A/56-32 telemetry, but no mud-density column in either sampled CSV and no adjudicated mud-loss onset label. The 16A daily summary contains a seepage-loss narrative, not an exact onset. No public source has passed the training gate.
 
 The official [3W dataset configuration](https://github.com/petrobras/3W/blob/main/dataset/dataset.ini), reporting dataset version 2.0.0 when inspected, lists production-flow/valve/hydrate events and production-system measurements. Its published class list does not supply drilling mud-loss, kick or stuck-pipe labels. **Not selected for this mud-loss target**; do not relabel its production events as drilling hazards. This is a metadata compatibility audit, not a downloaded-file qualification. No 3W files are included here.
 
