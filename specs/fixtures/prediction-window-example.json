@@ -1,0 +1,28 @@
+{
+  "schema_version": "mud-loss-windows-v1",
+  "kind": "synthetic",
+  "source_reference": "Owned schema example, not measured telemetry",
+  "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "permission_reference": "Owned synthetic example; checksum above is a placeholder",
+  "domain_reviewed": false,
+  "windows": [{
+    "sample_id": "example-1",
+    "physical_well_id": "SYN-A",
+    "wellbore_id": "SYN-A-MAIN",
+    "split": "train",
+    "anchor_md_m": 2030,
+    "feature_end_md_m": 2030,
+    "observed_through_md_m": 2130,
+    "next_loss_md_m": 2130,
+    "label_reviewed": false,
+    "label_source": "Invented solely to test the JSON contract",
+    "features": {
+      "rop_m_per_h": 12,
+      "wob_kn": 90,
+      "rpm": 100,
+      "torque_kn_m": 8,
+      "flow_in_l_per_min": 1800,
+      "mud_density_kg_per_m3": 1200
+    }
+  }]
+}
