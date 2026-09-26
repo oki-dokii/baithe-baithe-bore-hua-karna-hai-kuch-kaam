@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 from nwis.config import get_settings
 from nwis.db import connection
 from nwis.main import app
+from nwis.retrieval_eval import Benchmark, evaluate
 from nwis.seed import load_fixture, stable_id
 
 pytestmark = pytest.mark.skipif(
@@ -61,7 +62,7 @@ def test_spatial_correlation_filtered_search_and_citations():
                 event_id,
                 stable_id("wellbore", "SYN-B-MAIN"),
                 stable_id("interval", "B-F1"),
-                f"SYNTHETIC TEST mud losses {event_id}",
+                f"SYNTHETIC TEST mud losses zzretrievaleval {event_id}",
                 Jsonb({"quote": "Mud losses occurred from 1930 to 1940 m MD."}),
             ),
         )
@@ -110,6 +111,29 @@ def test_spatial_correlation_filtered_search_and_citations():
             ).status_code
             == 422
         )
+        benchmark = Benchmark.model_validate(
+            {
+                "schema_version": "retrieval-questions-v1",
+                "kind": "synthetic",
+                "dataset_id": str(dataset),
+                "source_reference": "owned golden fixture",
+                "review_reference": "synthetic integration assertions",
+                "questions": [
+                    {
+                        "id": f"SYN-Q{i:02d}",
+                        "question": "zzretrievaleval" if i == 0 else f"nonexistentunicorn{i}",
+                        "hazard": "mud_loss",
+                        "expected_passage_ids": [str(passage)] if i == 0 else [],
+                    }
+                    for i in range(15)
+                ],
+            }
+        )
+        evaluation = evaluate(benchmark, client, get_settings().viewer_token)
+        assert evaluation["source_recall_at_5"] == 1
+        assert evaluation["correct_abstentions"] == 14
+        assert evaluation["gates"]["at_least_15_questions"]
+        assert not evaluation["gates"]["real_source"]
     finally:
         # Preserve provenance while removing test-approved evidence from operational reads.
         with connection() as conn:
