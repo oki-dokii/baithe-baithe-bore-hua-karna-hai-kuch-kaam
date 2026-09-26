@@ -9,7 +9,7 @@ Recorded 2026-09-27. This is a software rehearsal and gap register, not a claim 
 | End-to-end synthetic paths | With local PostgreSQL and `NWIS_INTEGRATION=1`, backend integration files for ingestion, spatial intelligence, operations replay and prediction readiness: 7 passed. Includes synthetic review/permission, correlation/citation, alert lifecycle/idempotency/staleness and unavailable-score behavior. | Pass for these synthetic checks |
 | Scanned public-report trial | [NOD 25/10-2 R](../phase-2/real-source-qualification.md) 58-page OCR staged two cited drafts. Depth mismatch, attribution/rights and human approval remain open. | Partial; not approved operational evidence |
 | Public ML source | [FORGE audit](../phase-5/dataset-candidates.md) found telemetry/report candidates, no qualified 100 m mud-loss labels or current feature-schema coverage. | Open |
-| Fresh-install rehearsal | A fresh empty database, image rebuild and migration from scratch were **not** exercised in this run. Earlier Phase 1 validation is recorded [separately](../phase-1/README.md). | Open for final demonstration |
+| Fresh-install rehearsal | Earlier Phase 1 validation is recorded [separately](../phase-1/README.md). CI now runs a synthetic end-to-end rehearsal on its newly built Compose stack and rejects a nonempty database. A local empty-volume UI rehearsal and captured evidence are still pending. | Automated gate added; local visual gate open |
 | Retrieval evaluation | A read-only fixed-question evaluator now scores approved passage recall@5 and abstentions. A 15-question **synthetic** API regression passes; the reviewed real-source set and its result do not exist yet. Current retrieval is filtered full-text, not embeddings. | Tooling and synthetic check pass; real-source gate open |
 | Alert field evaluation | No real labeled replay case count, lead-time distribution or false-alert denominator. Synthetic one-episode behavior is tested only. | Open |
 | eRTMAC and field connectivity | No OIL interface contract, credentials or live stream. Fixed replay works; persistent disconnected field operation is not verified. | Open |
@@ -20,6 +20,12 @@ Recorded 2026-09-27. This is a software rehearsal and gap register, not a claim 
 Use [local setup](../phase-1/README.md) and [golden demo script](../phase-0/05-demo-and-evaluation.md). Enter the viewer/engineer/reviewer credentials from the local ignored `.env`, then load the synthetic fixture. Show the map, compare `SYN-A` with `SYN-B`, review the draft, start a new replay and step through 2029/2030/2031/2141 m. Demonstrate the cited historical alert and explicitly show `risk_score: null` with `model_not_available`. Treat the scenario as **SIMULATED** on every screen and in narration.
 
 The next honest demo gate is a fresh-install run plus recorded screenshots/API results, a fixed retrieval question set, and a reviewed public-report case. ML accuracy and OIL integration require external data/access; do not substitute synthetic checks for either.
+
+## Automated clean-database rehearsal
+
+The CI integration job starts Compose on a fresh runner, applies migrations, then runs `python -m nwis.demo_rehearsal` **before** the older integration smoke. The script refuses production or remote-extraction configuration and, by default, refuses any pre-existing dataset. It uses the owned `phase3-review-report.txt` to test fixture loading and repeatability, map radius, upload/extraction, reviewer approval, depth mapping, exact citation, filtered retrieval and no-support abstention. A new paused replay steps through 2029/2030/2030/2031/2141 m, checking the alert boundary, one cited episode and `risk_score: null`. Output is a small text-free JSON check summary; it does not print tokens or report passages. `--allow-existing` is for an explicitly chosen development database only and does **not** qualify as a fresh-install rehearsal.
+
+The CI check is a software demonstration with synthetic data, not a reviewed real-source extraction benchmark, an ML model, or eRTMAC connectivity. A browser walkthrough, visual screenshots and load/performance evidence remain separate gates. Do not run it on any production or mixed-use database.
 
 ## Fixed-question retrieval evaluation
 

@@ -19,7 +19,9 @@ Checked 2026-09-26. This is a local public-source trial, separate from the ficti
 ## Source inspection
 
 - PDF page 1 visibly identifies a geological summary/completion report for *Esso 25/10-2 (re-entry)*, dated July 1972. PDF page 7 has a clearly readable **Drilling Problems** section: it reports lost circulation at 7,733 ft, followed by a stuck-pipe event and sidetrack. The page was visually checked against local OCR.
-- 7,733 ft converts mathematically to **2,357.02 m**. The [NOD wellbore summary](https://factpages.sodir.no/en/wellbore/PageView/Exploration/With/Wdss/511) describes a lost-circulation depth around 2,369 m in its history. The 12 m difference and page 7's lack of explicit MD/KB notation require a domain review. Do not silently replace either value or approve a mapped event.
+- PDF page 10 visibly labels its re-entry stratigraphy table **“KB 31 feet”** and its column “Drill Depth (feet).” This gives a report-wide clue to the depth convention, but page 7 does **not** explicitly label the incident depth as MD/KB. Do not promote that clue to an approved event datum without domain review.
+- 7,733 ft converts mathematically to **2,357.02 m**. The [NOD wellbore summary](https://factpages.sodir.no/en/wellbore/PageView/Exploration/With/Wdss/511) describes a lost-circulation depth around 2,369 m in its history. The approximately 12 m difference remains unresolved; do not silently replace either value or approve a mapped event.
+- This is an isolated discrepancy in the checked narrative values, not a general conversion rule: report 7,187 ft = 2,190.60 m versus NOD 2,191 m (original TD); 7,262 ft = 2,213.46 m versus NOD 2,213 m (fish); 8,192 ft = 2,496.92 m versus NOD 2,497 m (sidetrack cones). NOD 2,369 m is approximately 7,772 ft, about 39 ft above the source's 7,733 ft. A transcription/summary error is a **hypothesis**, not a resolved fact.
 - The report combines the original well and the re-entry history. The page 7 event belongs to the re-entry narrative, but precise wellbore attribution, coordinate equivalence and depth datum need reviewer confirmation. The local source record is linked only to 25/10-2 R; no approved correlation interval, trajectory or cross-well analogue was created.
 
 ## Local ingestion trial
@@ -38,6 +40,10 @@ Upload document ID: `469ec1d9-4160-46e9-ae12-ed940eacae5a`. The one local extrac
 Two page-7 drafts were produced: `mud_loss` and `stuck_pipe`. Both are still `needs_review`. The mud-loss draft initially missed the numeric depth because the line says “depth of 7733 feet”; the local extractor now recognizes that phrase. A source-checked transcription correction recorded 7,733 feet and incremented the draft to version 2, with audit rationale. The normalized MD and formation remain null because the source axis, datum and formation are unresolved. Its remaining flags are `unknown_depth_axis`, `unknown_depth_datum`, `formation_unresolved` and `ocr_source_verify`. The stuck-pipe draft retains all original review flags. A viewer request for the unapproved document returned 404.
 
 This trial demonstrates real scanned-report OCR, page citation and conservative review staging. It **does not** satisfy the full real-source acceptance gate for a reviewed, depth-resolved event. The reviewer must reconcile the source and FactPage depths before approving a claim. No source-derived alert was created.
+
+## Follow-up source candidate integrity
+
+A second locally staged file named `4652_1_9_7_COMPLETION_DRILLING_REPORT.pdf` is **not qualified**. The local copy is only about 6.4 MiB and `pdfinfo` cannot recover a valid page tree (invalid cross-reference entries, zero usable pages). The [NOD 1/9-7 document listing](https://factpages.sodir.no/en/wellbore/PageView/Exploration/Wdss/4652) lists that report at about 103.62 MiB. Treat the local file as incomplete; do not ingest it, infer events from it, or count it among reviewed reports. Its local SHA-256 is `77f091424b158765a86e9cd003cc5a8fefb7810340291494d12ce9ce15926f35`. The file remains ignored and has not been overwritten or committed.
 
 ## Gate status
 
