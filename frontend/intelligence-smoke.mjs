@@ -19,6 +19,7 @@ try {
     .getByLabel("Local access token")
     .fill(process.env.NWIS_REVIEWER_TOKEN);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByRole("button", { name: "Well intelligence" }).click();
   await page
     .getByRole("heading", { name: "Nearby is a starting point." })
     .waitFor();
@@ -101,10 +102,13 @@ try {
     "Phase 3 UI passed: review, map, golden mapping, case/source citation, search/abstention, mobile width; no page errors.",
   );
 } catch (error) {
-  await mkdir('artifacts', { recursive: true });
-  await page.screenshot({path:'artifacts/intelligence-failure.png',fullPage:true});
-  console.log(await page.locator('body').innerText());
-  console.log('Browser errors:', errors);
+  await mkdir("artifacts", { recursive: true });
+  await page.screenshot({
+    path: "artifacts/intelligence-failure.png",
+    fullPage: true,
+  });
+  console.log(await page.locator("body").innerText());
+  console.log("Browser errors:", errors);
   throw error;
 } finally {
   await browser.close();

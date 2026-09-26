@@ -15,10 +15,12 @@ from nwis.security import Principal, current_principal, require_role
 from nwis.seed import load_fixture
 from nwis.ingestion.api import router as ingestion_router
 from nwis.intelligence import router as intelligence_router
+from nwis.operations import router as operations_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
 app.include_router(ingestion_router)
 app.include_router(intelligence_router)
+app.include_router(operations_router)
 _fixture_path = Path("/app/specs/fixtures/golden-demo.json")
 
 
@@ -108,7 +110,10 @@ def system_status(_principal: Principal = Depends(current_principal)):
         spatial=spatial,
         vector=vector,
         ingestion=ingestion,
-        replay=ComponentStatus(state="not_implemented", detail="Scheduled for Phase 4"),
+        replay=ComponentStatus(
+            state="available",
+            detail="Fixed synthetic scenario; polling snapshots; dedicated replay worker required for autoplay",
+        ),
         prediction=ComponentStatus(state="not_implemented", detail="No trained model"),
         datasets=datasets,
         checked_at=datetime.now(timezone.utc),
