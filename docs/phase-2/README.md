@@ -1,6 +1,6 @@
 # Phase 2 — Evidence ingestion and review
 
-Implemented on 2026-09-25. This is a prototype implementation, not a qualified drilling system. The real-source gate remains open.
+Implemented on 2026-09-25. This is a prototype implementation, not a qualified drilling system. The real-source gate remains open. A [Norwegian Offshore Directorate scanned-report trial](real-source-qualification.md) now exercises all 58 pages and stages two cited incidents, but neither is approved for operational use.
 
 ## What works
 
@@ -52,7 +52,7 @@ Acceptance coverage: ING-01 exercises text and scanned reports through upload/ex
 
 ## Open gates and limits
 
-1. **Real public report qualification:** no real report has passed the ingestion/review path. Volve remains a candidate. A fallback Sodir completion-report download was attempted but timed out; the advertised PDF was approximately 101 MiB, beyond this prototype's default limit. Its partial download is ignored raw data, not a validated report. License, well identity, units/datum, attribution and usable subset must be qualified before import. Never relabel foreign wells as OIL/Assam observations.
+1. **Real public report qualification:** the [NOD 25/10-2 R trial](real-source-qualification.md) processed a 58-page scanned report and produced two page-cited drafts, but neither was approved. Source depth and the NOD summary disagree, and the report's MD/datum/formation and redistribution rights need review. Volve remains a separate candidate. An earlier, approximately 101 MiB Sodir report download timed out and was not used. Never relabel foreign wells as OIL/Assam observations.
 2. **Live model extraction:** provider/model/budget remain unselected. The local regex baseline misses complex prose, tables, cross-page context and many mitigation links. Reviewers must inspect sources and add missed evidence. Empty extraction does not mean no incidents.
 3. **Structured programs:** automated casing/cement/mud-program extraction is not implemented; the foundation tables remain. This phase structures incident evidence and associated mitigation/outcome/NPT, not every report field named in the problem statement.
 4. **Safety/scale:** no live eRTMAC, predictions, operational recommendations, formation correlation or alerts yet. Reports are limited to a single selected wellbore. The index currently shows the latest 100 visible uploaded documents. Storage is local filesystem, not object storage. Retention/orphan cleanup, large-document streaming, comprehensive audit denials and adversarial parser hardening need follow-up.

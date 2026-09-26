@@ -53,6 +53,14 @@ def test_conservative_baseline_and_quote_validation():
     assert not extract.quote_is_supported("   ", text)
 
 
+def test_report_depth_of_phrase_keeps_axis_and_datum_unknown():
+    found = extract.local_candidates("depth of 7733 feet where lost circulation was encountered.")
+    assert len(found) == 1
+    assert found[0].depth_start == found[0].depth_end == 7733
+    assert found[0].depth_unit == "feet"
+    assert found[0].depth_axis is None and found[0].depth_datum is None
+
+
 def test_private_reports_never_call_remote_provider(monkeypatch):
     monkeypatch.setattr(
         extract, "get_settings", lambda: SimpleNamespace(extraction_provider="openai_compatible")

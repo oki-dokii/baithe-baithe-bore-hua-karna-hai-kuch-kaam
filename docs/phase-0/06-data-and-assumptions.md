@@ -1,16 +1,17 @@
 # Data register and assumptions
 
-Checked: 2026-09-25. `Candidate` means suitability/access/redistribution has not been established by downloading and inspecting selected files. Public availability is not blanket permission to republish raw data.
+Updated: 2026-09-26. `Candidate` means suitability/access/redistribution has not been established by downloading and inspecting selected files. Public availability is not blanket permission to republish raw data.
 
 ## Dataset selection
 
 | Source | Intended role | Current decision / gate |
 |---|---|---|
 | Owned synthetic scenario | Deterministic demo, negative tests, repeatable replay | Selected; fixture in this repository. All records labeled synthetic |
-| Equinor Volve | Candidate real reports, well surveys and drilling context | First real-source candidate; qualify a small report/survey subset before integrating |
+| Equinor Volve | Candidate real reports, well surveys and drilling context | Access now routes through Databricks Marketplace; no source file qualified in this project |
+| NOD 25/10-2 R | Scanned completion report with mud-loss and stuck-pipe narrative | Full 58-page PDF ingested locally; two OCR drafts retained for review. Depth reconciliation and report-specific redistribution rights remain open; [source record](../phase-2/real-source-qualification.md) |
 | FORCE 2020 | Possible later lithology/log experiments | Deferred; do not assume matching Volve wells or hazard labels |
 | Petrobras 3W | Possible event-detection experiment | Phase 5 metadata audit: published 2.0.0 class list does not match drilling mud-loss target; not selected ([audit](../phase-5/README.md)) |
-| Sodir well records | Candidate identity/coordinate cross-check | Later, only with exact external well identifiers |
+| Other Sodir well records | Candidate identity/coordinate cross-check | Later, only with exact external well identifiers |
 | Texas RRC scans | OCR stress testing | Deferred; not needed for the first complete scenario |
 | OIL WCR/DDRs/eRTMAC | Future domain validation/integration | Not supplied in this project; availability through SIH remains unknown |
 | DGH/NDR | Potential future Indian data | Access, terms and timing unverified; do not assert approval is impossible |
@@ -23,7 +24,7 @@ The [official 3W project](https://github.com/petrobras/3W) describes an evolving
 
 Before importing each subset, record: source URL, release/commit, download date, license/attribution, selected files and checksums, well identities, source CRS/depth datum, units, report quality, available event labels, coverage and missing fields. Record redistribution separately from permission to analyze. Retain original locations and formation identity; never present foreign wells as observed Assam wells.
 
-The first candidate target is one usable Volve drilling report plus associated well header and survey if available. If unavailable, keep the public-data acceptance gate open and select another attributable drilling report after checking equivalent criteria. The synthetic scenario remains runnable but cannot satisfy the real-source gate.
+The first local report trial used NOD wellbore 25/10-2 R after Volve access could not be completed without a Databricks account. Its [qualification record](../phase-2/real-source-qualification.md) documents real scanned-report OCR and unresolved depth/rights gates. Volve remains a candidate for a drilling report with associated header and survey. The synthetic scenario remains runnable but cannot satisfy the real-source gate.
 
 ## Assumptions and follow-up
 
@@ -32,7 +33,7 @@ The first candidate target is one usable Volve drilling report plus associated w
 | A01 | Official SIH year/PS ID | Unverified draft metadata; confirm before pitch/submission |
 | A02 | OIL sample data | Not provided; revisit when organizer material arrives |
 | A03 | Team size and deadline | Unknown; backlog is dependency-based, without invented calendar estimates |
-| A04 | Volve access and usable subset | Candidate; profile before Phase 2 public ingestion |
+| A04 | Volve access and usable subset | Candidate; official access currently uses Databricks Marketplace and requires account access. A separate NOD 25/10-2 R scanned report was trialed locally; see the [qualification record](../phase-2/real-source-qualification.md). |
 | A05 | 3W label compatibility | Published 2.0.0 metadata incompatible with chosen drilling mud-loss target; no raw-file qualification or training performed |
 | A06 | Cross-source spatial overlap | No assumed overlap; validate using well identity, original CRS and authoritative coordinates |
 | A07 | Formation mapping | Prototype heuristic; domain review required before operational use |

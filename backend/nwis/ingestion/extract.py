@@ -46,7 +46,7 @@ def local_candidates(text: str) -> list[Candidate]:
                 ):
                     continue
                 depth = re.search(
-                    r"\b(?:at|from|between)\s+(\d[\d,]*(?:\.\d+)?)\s*(?:m|ft)?\s*(?:(?:to|and|[-–])\s*(\d[\d,]*(?:\.\d+)?)\s*)?(m(?:et(?:er|re)s)?|ft|feet)\b(?:\s*(MD|TVD))?",
+                    r"\b(?:at|from|between|depth of)\s+(\d[\d,]*(?:\.\d+)?)\s*(?:m|ft)?\s*(?:(?:to|and|[-–])\s*(\d[\d,]*(?:\.\d+)?)\s*)?(m(?:et(?:er|re)s)?|ft|feet)\b(?:\s*(MD|TVD))?",
                     sentence,
                     re.I,
                 )
