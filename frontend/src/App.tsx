@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, lazy, useEffect, useState } from "react";
 import Documents from "./Documents";
-import Intelligence from "./Intelligence";
+const Intelligence = lazy(() => import("./Intelligence"));
+import Operations from "./Operations";
 
 type Component = { state: string; detail: string | null };
 type Status = {
@@ -56,9 +57,9 @@ export default function App() {
   const [radius, setRadius] = useState(5);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<"documents" | "intelligence" | "foundation">(
-    "intelligence",
-  );
+  const [view, setView] = useState<
+    "documents" | "intelligence" | "foundation" | "operations"
+  >("operations");
 
   useEffect(() => {
     if (!entered) return;
@@ -195,6 +196,12 @@ export default function App() {
           <>
             <nav className="workspace-nav" aria-label="Workspace">
               <button
+                className={view === "operations" ? "active" : ""}
+                onClick={() => setView("operations")}
+              >
+                00 <span>Operations</span>
+              </button>
+              <button
                 className={view === "documents" ? "active" : ""}
                 onClick={() => setView("documents")}
               >
@@ -216,7 +223,13 @@ export default function App() {
             {view === "documents" ? (
               <Documents token={entered} />
             ) : view === "intelligence" ? (
-              <Intelligence token={entered} />
+              <Suspense
+                fallback={<p role="status">Loading the offset atlas…</p>}
+              >
+                <Intelligence token={entered} />
+              </Suspense>
+            ) : view === "operations" ? (
+              <Operations token={entered} />
             ) : (
               <>
                 <div className="statusline">

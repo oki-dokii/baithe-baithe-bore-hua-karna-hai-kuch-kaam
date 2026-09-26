@@ -66,6 +66,14 @@ services:
       - ./specs:/app/specs:ro
       - document_storage:/app/storage
 
+  replay:
+    build: ./backend
+    command: ["python", "-m", "nwis.operations_worker"]
+    environment: *backend_environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   web:
     build: ./frontend
     environment:

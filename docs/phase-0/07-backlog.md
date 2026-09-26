@@ -1,6 +1,6 @@
 # Implementation backlog
 
-Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public-source qualification and live-provider validation open; see its [implementation record](../phase-2/README.md). Phase 3 core well intelligence is implemented with semantic retrieval still open. Phases 4–6 remain unstarted. Build one complete mud-loss path before expanding hazard scenarios.
+Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented with public-source qualification and live-provider validation open; see its [implementation record](../phase-2/README.md). Phase 3 core well intelligence is implemented with semantic retrieval still open. Phase 4 core fixed replay/alerts is implemented with streaming and persistent offline recovery open; see its [record](../phase-4/README.md). Phases 5–6 remain unstarted. Build one complete mud-loss path before expanding hazard scenarios.
 
 | Phase | Deliverables in dependency order | Exit check |
 |---|---|---|
