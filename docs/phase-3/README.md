@@ -35,6 +35,8 @@ The Leaflet map uses WGS84 positions and an offline coordinate grid. It supports
 
 Search returns extractive evidence lists, never generated operating advice. It does not search unreviewed page text. Missing support produces `no_approved_supporting_evidence`, not a fabricated answer. **Semantic embeddings and natural-language synthesis are not present**; the response and UI identify full-text mode. Search's bounded offset pagination is an explicit prototype deviation from the original cursor contract.
 
+A [read-only Phase 6 evaluator](../phase-6/README.md#fixed-question-retrieval-evaluation) now scores fixed questions against the approved source passages returned by this endpoint. It does not change search ranking, create embeddings or substitute synthetic fixtures for real-source evaluation.
+
 ## Verification and outstanding acceptance
 
 The backend suite covers golden mapping, datum/axis/formation/dataset negatives, ambiguous survey inverse, extrapolation, radius membership and a near-boundary check, independent spherical-distance sanity check, score explanations, approved-only retrieval, filters, exact-page citations, role restrictions and rejected evidence exclusion. Run from `backend` using the Phase 2 environment:
