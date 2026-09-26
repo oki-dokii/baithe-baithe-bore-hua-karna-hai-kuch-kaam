@@ -5,9 +5,12 @@ export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     proxy: {
-      "/api":
-        loadEnv(mode, ".", "NWIS_DEV_").NWIS_DEV_API_URL ||
-        "http://localhost:8000",
+      "/api": {
+        target:
+          loadEnv(mode, ".", "NWIS_DEV_").NWIS_DEV_API_URL ||
+          "http://localhost:8000",
+        ws: true,
+      },
       "/healthz":
         loadEnv(mode, ".", "NWIS_DEV_").NWIS_DEV_API_URL ||
         "http://localhost:8000",

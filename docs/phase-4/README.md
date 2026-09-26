@@ -10,7 +10,8 @@ Phases 2 and 3 were merged into `main` before this work. Their real-report/live-
 - Mapping/evidence snapshots preserve the source quote, document/page/text versions, raw and mapped MD, survey/interval versions and surface distance. New alerts exclude draft/rejected/quality-flagged/unresolved evidence. Changed event review/version, interval versions, survey versions, reference review and missing source joins produce review-required indications. Original snapshots are never deleted to hide a later change.
 - Lifecycle is independent of relevance. NEW → ACKNOWLEDGED does not mean RESOLVED; explicit review, resolve, dismiss and reopen actions require a rationale, current version and authorized role. Moving past the interval changes relevance, not the human lifecycle decision.
 - Engineer feedback separates action taken, observed outcome and rationale. `adjudicated_label` remains null; no incident observed is not automatically a false positive.
-- Responsive editorial operations screen with sample receipt time, 15-second stale indication, worker readiness, replay controls, expandable evidence, action/feedback histories and a persistent no-model label. Disconnected cached data is not presented as fresh; actions require a server response. The map module loads only when its workspace is opened.
+- Responsive editorial operations screen with sample receipt time, 15-second stale indication, worker readiness, replay controls, expandable evidence, action/feedback histories and a persistent no-model label. Disconnected in-memory data is not presented as fresh; actions require a server response. The map module loads only when its workspace is opened.
+- Authenticated WebSocket snapshot transport for the selected replay, with HTTP polling fallback. The token is sent in the first WebSocket frame, not a URL. The server sends a persisted snapshot every 1.5 seconds; this is not a cursor-based event backlog or live eRTMAC feed.
 
 ## Try it
 
@@ -29,17 +30,17 @@ The local preview uses host API 18081, web 13001 and DB 15432. `python -m nwis.o
 
 ## APIs and tests
 
-`POST /replay-sessions`, `GET /replay-sessions`, `GET /replay-sessions/{id}`, `POST /replay-sessions/{id}/control`, `POST /alerts/{id}/actions`, and `POST /alerts/{id}/feedback`. Mutations require `Idempotency-Key`; controls/actions also require `expected_version`. GET returns a full persisted snapshot, never advances replay, and can be used after reconnect. ML score is null with `model_not_available`.
+`POST /replay-sessions`, `GET /replay-sessions`, `GET /replay-sessions/{id}`, `WS /replay-sessions/{id}/stream`, `POST /replay-sessions/{id}/control`, `POST /alerts/{id}/actions`, and `POST /alerts/{id}/feedback`. Mutations require `Idempotency-Key`; controls/actions also require `expected_version`. GET and WebSocket return persisted snapshots and never advance replay. The WebSocket requires an initial JSON frame with the bearer token, closes unauthorized clients, and does not accept credentials in the URL. HTTP remains the reconnect fallback. ML score is null with `model_not_available`.
 
 From `backend`, with an initialized development DB and environment: `NWIS_INTEGRATION=1 uv run --frozen --extra dev pytest -q`. The new integration test checks concurrent duplicate step submission, trigger boundaries, one episode with multiple evidence links, role denials, stale versions, acknowledgment, relevance passage, reset isolation, feedback and changed-evidence visibility. Tests retain synthetic audit records.
 
-`frontend/operations-smoke.mjs` uses Playwright and `NWIS_ENGINEER_TOKEN`; the remaining runtime variables match the Phase 2 browser script. It expects previously reviewed synthetic evidence and a running replay worker. It tests manual boundaries, deduplication, acknowledgment, reset, automatic playback and mobile overflow. Screenshots remain ignored under `frontend/artifacts/`.
+`frontend/operations-smoke.mjs` uses Playwright and `NWIS_ENGINEER_TOKEN`; the remaining runtime variables match the Phase 2 browser script. It expects previously reviewed synthetic evidence and a running replay worker. It tests manual boundaries, deduplication, acknowledgment, reset, automatic playback and mobile overflow. `frontend/websocket-smoke.mjs` checks viewer WebSocket receipt and a browser with WebSocket disabled falling back to HTTP. Screenshots remain ignored under `frontend/artifacts/`.
 
 ## Explicit limits / acceptance status
 
 This is the **core fixed-scenario prototype**, not a completed live operations platform. ALR-01/02 have golden regression coverage. ALR-03 covers stale receipts and common evidence invalidation but not an externally supplied telemetry protocol. UX-01/02 have responsive operations/evidence views, not full offline persistence. FBK-01 captures action/outcome/uncertainty, not a reviewer adjudication workflow.
 
-- Polling snapshots every 1.5 seconds replace the planned WebSocket/cursor transport for now. They recover persisted current state, not an event-stream backlog. No push notifications are sent.
+- WebSocket snapshots replace browser-side polling when connected. The server still samples persisted state every 1.5 seconds; there is no cursor transport, event-stream backlog or push notification service. Reconnect fetches current persisted state, not missed intermediate notifications.
 - Only the owned fixed golden scenario is supported. There is no live eRTMAC input, arbitrary-well replay editor, physical simulator, equipment control or trained probability model.
 - No persistent offline storage or queued offline acknowledgment; losing connectivity disables mutations and labels cached state. A reload while offline cannot restore the prior in-memory snapshot.
 - Evidence versions must be bumped when underlying surveys/intervals are revised. Unversioned direct database edits are outside the contract. A complete supersession/revocation UI and exhaustive concurrent metadata-mutation hardening remain future work.

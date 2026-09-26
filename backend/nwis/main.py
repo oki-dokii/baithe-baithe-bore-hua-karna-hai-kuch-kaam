@@ -114,7 +114,7 @@ def system_status(_principal: Principal = Depends(current_principal)):
         ingestion=ingestion,
         replay=ComponentStatus(
             state="available",
-            detail="Fixed synthetic scenario; polling snapshots; dedicated replay worker required for autoplay",
+            detail="Fixed synthetic scenario; WebSocket snapshots with HTTP fallback; replay worker required for autoplay",
         ),
         prediction=ComponentStatus(state="not_implemented", detail="No trained model"),
         datasets=datasets,

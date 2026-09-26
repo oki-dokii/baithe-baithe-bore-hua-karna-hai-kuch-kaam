@@ -1,18 +1,20 @@
 """Deterministic synthetic replay. Historical lookahead is not a risk probability."""
 
+import asyncio
 import math
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
 from nwis.db import connection
 from nwis.ingestion.api import receipt, save_receipt
 from nwis.intelligence import analogues, event_case
-from nwis.security import current_principal, require_role
+from nwis.security import current_principal, principal_for_token, require_role
 from nwis.seed import stable_id
 
 router = APIRouter(prefix="/api/v1")
@@ -387,6 +389,42 @@ def snapshot(session_id: UUID, _principal=Depends(current_principal)):
             "transport": "polling",
             "steps_total": len(DEPTHS),
         }
+
+
+@router.websocket("/replay-sessions/{session_id}/stream")
+async def stream_snapshot(websocket: WebSocket, session_id: UUID):
+    """Authenticated snapshot transport; persisted HTTP GET remains the reconnect fallback."""
+    await websocket.accept()
+    try:
+        auth = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+    except WebSocketDisconnect:
+        return
+    except (asyncio.TimeoutError, ValueError):
+        await websocket.close(code=4401)
+        return
+    token = auth.get("token") if isinstance(auth, dict) else None
+    if not isinstance(token, str) or not token or len(token) > 4096:
+        await websocket.close(code=4401)
+        return
+    try:
+        principal = await asyncio.to_thread(principal_for_token, token)
+    except Exception:
+        await websocket.close(code=1011)
+        return
+    if principal is None:
+        await websocket.close(code=4401)
+        return
+    while True:
+        try:
+            body = await asyncio.to_thread(snapshot, session_id, principal)
+            body["transport"] = "websocket_snapshot_stream"
+            await websocket.send_json(jsonable_encoder(body))
+            await asyncio.sleep(1.5)
+        except HTTPException as exc:
+            await websocket.close(code=4404 if exc.status_code == 404 else 1011)
+            return
+        except (WebSocketDisconnect, RuntimeError):
+            return
 
 
 TRANSITIONS = {
