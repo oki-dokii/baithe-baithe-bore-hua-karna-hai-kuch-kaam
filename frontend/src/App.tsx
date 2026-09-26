@@ -2,6 +2,7 @@ import { FormEvent, Suspense, lazy, useEffect, useState } from "react";
 import Documents from "./Documents";
 const Intelligence = lazy(() => import("./Intelligence"));
 import Operations from "./Operations";
+import Prediction from "./Prediction";
 
 type Component = { state: string; detail: string | null };
 type Status = {
@@ -58,7 +59,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<
-    "documents" | "intelligence" | "foundation" | "operations"
+    "documents" | "intelligence" | "foundation" | "operations" | "prediction"
   >("operations");
 
   useEffect(() => {
@@ -219,6 +220,12 @@ export default function App() {
               >
                 03 <span>Well directory</span>
               </button>
+              <button
+                className={view === "prediction" ? "active" : ""}
+                onClick={() => setView("prediction")}
+              >
+                04 <span>Model readiness</span>
+              </button>
             </nav>
             {view === "documents" ? (
               <Documents token={entered} />
@@ -230,6 +237,8 @@ export default function App() {
               </Suspense>
             ) : view === "operations" ? (
               <Operations token={entered} />
+            ) : view === "prediction" ? (
+              <Prediction token={entered} />
             ) : (
               <>
                 <div className="statusline">

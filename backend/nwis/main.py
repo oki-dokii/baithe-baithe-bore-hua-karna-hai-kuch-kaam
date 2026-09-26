@@ -16,11 +16,13 @@ from nwis.seed import load_fixture
 from nwis.ingestion.api import router as ingestion_router
 from nwis.intelligence import router as intelligence_router
 from nwis.operations import router as operations_router
+from nwis.prediction import router as prediction_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
 app.include_router(ingestion_router)
 app.include_router(intelligence_router)
 app.include_router(operations_router)
+app.include_router(prediction_router)
 _fixture_path = Path("/app/specs/fixtures/golden-demo.json")
 
 
