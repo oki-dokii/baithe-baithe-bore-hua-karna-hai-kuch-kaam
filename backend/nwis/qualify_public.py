@@ -35,8 +35,10 @@ def register(path: Path) -> None:
     lat_ed50 = 59 + 9 / 60 + 39.27 / 3600
     with connection() as conn:
         conn.execute(
-            """INSERT INTO dataset(id,external_id,name,kind,version,license_reference,qualification_status)
-            VALUES(%s,'NOD-511-source-trial','NOD wellbore 25/10-2 R','public',%s,%s,'source_trial')
+            """INSERT INTO dataset(id,external_id,name,kind,version,license_reference,qualification_status,
+            origin_kind,authorization_state,applicability)
+            VALUES(%s,'NOD-511-source-trial','NOD wellbore 25/10-2 R','public',%s,%s,'source_trial',
+            'public_primary','unverified','review_only')
             ON CONFLICT(id) DO NOTHING""",
             (
                 DATASET,

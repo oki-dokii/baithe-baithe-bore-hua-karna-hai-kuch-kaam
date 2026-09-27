@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 
 from nwis.config import get_settings
 from nwis.db import connection
+from nwis.decision_ledger import verify
 from nwis.main import app
 from nwis.seed import load_fixture, stable_id
 
@@ -124,6 +125,15 @@ def test_replay_alert_lifecycle_idempotency_and_stale_receipt():
             },
         )
         assert feedback.status_code == 201 and feedback.json()["adjudicated_label"] is None
+        with connection() as conn:
+            ledger = conn.execute(
+                "SELECT action FROM decision_ledger WHERE entity_type='alert' AND entity_id=%s ORDER BY sequence",
+                (alert_id,),
+            ).fetchall()
+            assert [row["action"] for row in ledger] == [
+                "alert_created", "alert_acknowledge", "alert_feedback"
+            ]
+            assert verify(conn)["ok"]
         with connection() as conn:
             conn.execute(
                 "UPDATE telemetry_sample SET received_at=now()-interval '20 seconds' WHERE replay_session_id=%s",

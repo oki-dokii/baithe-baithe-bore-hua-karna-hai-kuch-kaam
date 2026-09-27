@@ -23,6 +23,8 @@ pytestmark = pytest.mark.skipif(
 def test_failed_pdf_retry_and_expired_lease():
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {get_settings().reviewer_token}"}
+    with connection() as conn:
+        load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
     option = client.get("/api/v1/document-options", headers=headers).json()[0]
     data = {"dataset_id": option["dataset_id"], "wellbore_id": option["wellbore_id"]}
     uploaded = client.post(

@@ -38,8 +38,12 @@ type Doc = {
   page_count: number | null;
   kind: string;
   qualification_status: string;
+  origin_kind: string;
+  authorization_state: string;
+  applicability: string;
 };
 type Detail = Doc & {
+  approval_allowed: boolean;
   review_version: number;
   candidates: Candidate[];
   pages: Page[];
@@ -58,7 +62,7 @@ type Option = {
   kind: string;
 };
 type Identity = { role: string; extraction_provider: string; document_max_pages: number };
-const human = (value: string) => value.replaceAll("_", " ");
+const human = (value?: string) => (value ?? "unclassified").replaceAll("_", " ");
 async function api<T>(
   token: string,
   path: string,
@@ -83,6 +87,7 @@ function Review({
   onSaved,
   canReview,
   approvalBlocked,
+  qualificationStatus,
 }: {
   candidate: Candidate;
   token: string;
@@ -90,6 +95,7 @@ function Review({
   onSaved: () => void;
   canReview: boolean;
   approvalBlocked: boolean;
+  qualificationStatus: string;
 }) {
   const [fields, setFields] = useState(candidate.current_fields);
   const [rationale, setRationale] = useState("");
@@ -301,7 +307,9 @@ function Review({
           <>
             {approvalBlocked && (
               <p className="quality-note">
-                Benchmark staging · approval is locked. Inspect the source,
+                {qualificationStatus === "staged_unreviewed"
+                  ? "Benchmark staging"
+                  : "Source qualification"} · approval is locked. Inspect the source,
                 record corrections or reject unsupported drafts; do not treat
                 these as operational evidence.
               </p>
@@ -712,7 +720,9 @@ export default function Documents({ token }: { token: string }) {
                 </span>
                 <strong>{doc.filename}</strong>
                 <small>
-                  {doc.kind} · {doc.page_count ?? "—"} pages
+                  {doc.origin_kind
+                    ? `${human(doc.origin_kind)} · ${human(doc.applicability)}`
+                    : doc.kind} · {doc.page_count ?? "—"} pages
                 </small>
                 <span className={`state state-${doc.ingest_status}`}>
                   {human(doc.ingest_status)}
@@ -747,6 +757,12 @@ export default function Documents({ token }: { token: string }) {
           </div>
           {detail ? (
             <>
+              {detail.origin_kind && (
+                <p className="quality-note">
+                  Source: {human(detail.origin_kind)} · authorization: {human(detail.authorization_state)}
+                  · use: {human(detail.applicability)} · qualification: {human(detail.qualification_status)}.
+                </p>
+              )}
               <div className="source-toolbar">
                 <strong title={detail.filename}>{detail.filename}</strong>
                 {detail.pages.length > 0 && (
@@ -887,7 +903,9 @@ export default function Documents({ token }: { token: string }) {
                 token={token}
                 documentId={detail.id}
                 canReview={canReview}
-                approvalBlocked={detail.qualification_status === "staged_unreviewed"}
+                approvalBlocked={!(detail.approval_allowed ??
+                  (detail.qualification_status !== "staged_unreviewed"))}
+                qualificationStatus={detail.qualification_status}
                 onSaved={() => {
                   setRevision((r) => r + 1);
                   setNotice("Review decision recorded with your rationale.");
