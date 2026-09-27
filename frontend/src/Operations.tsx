@@ -295,9 +295,16 @@ export default function Operations({ token }: { token: string }) {
     let active = true;
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
     setStreamConnected(false);
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${location.host}/api/v1/replay-sessions/${selected}/stream`;
+    function armWatchdog(current: WebSocket) {
+      if (watchdog) clearTimeout(watchdog);
+      // The server sends a snapshot every 1.5 s. A silent, half-open socket
+      // must not suppress the persisted HTTP fallback indefinitely.
+      watchdog = setTimeout(() => current.close(), 6000);
+    }
     function connect() {
       if (!active) return;
       let current: WebSocket;
@@ -308,11 +315,15 @@ export default function Operations({ token }: { token: string }) {
         retry = setTimeout(connect, 5000);
         return;
       }
-      current.onopen = () => current.send(JSON.stringify({ token }));
+      current.onopen = () => {
+        current.send(JSON.stringify({ token }));
+        armWatchdog(current);
+      };
       current.onmessage = (event) => {
         try {
           const next = JSON.parse(event.data) as Snapshot;
           if (next.session?.id !== selected) return;
+          armWatchdog(current);
           setData(next);
           setStreamConnected(true);
           setOffline(false);
@@ -323,6 +334,7 @@ export default function Operations({ token }: { token: string }) {
       };
       current.onerror = () => current.close();
       current.onclose = () => {
+        if (watchdog) clearTimeout(watchdog);
         if (!active) return;
         setStreamConnected(false);
         retry = setTimeout(connect, 5000);
@@ -332,6 +344,7 @@ export default function Operations({ token }: { token: string }) {
     return () => {
       active = false;
       if (retry) clearTimeout(retry);
+      if (watchdog) clearTimeout(watchdog);
       socket?.close();
     };
   }, [token, selected]);

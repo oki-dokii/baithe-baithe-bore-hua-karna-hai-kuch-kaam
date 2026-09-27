@@ -39,7 +39,32 @@ try {
   await fallback.getByLabel("Local access token").fill(process.env.NWIS_VIEWER_TOKEN);
   await fallback.getByRole("button", { name: "Connect", exact: true }).click();
   await fallback.getByText("Transport: HTTP reconnect fallback").waitFor({ timeout: 15000 });
-  console.log("Viewer replay snapshots: authenticated WebSocket and HTTP fallback passed.");
+  const stalled = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await stalled.addInitScript(() => {
+    window.__nwisStalledSocketsClosed = 0;
+    Object.defineProperty(window, "WebSocket", {
+      value: class {
+        constructor() {
+          setTimeout(() => this.onopen?.(), 0);
+        }
+        send() {}
+        close() {
+          window.__nwisStalledSocketsClosed += 1;
+          this.onclose?.();
+        }
+      },
+    });
+  });
+  await stalled.goto(process.env.NWIS_UI_URL || "http://127.0.0.1:13001");
+  await stalled.getByLabel("Local access token").fill(process.env.NWIS_VIEWER_TOKEN);
+  await stalled.getByRole("button", { name: "Connect", exact: true }).click();
+  await stalled.getByText("Transport: HTTP reconnect fallback").waitFor({ timeout: 15000 });
+  await stalled.waitForFunction(
+    () => window.__nwisStalledSocketsClosed > 0,
+    undefined,
+    { timeout: 10000 },
+  );
+  console.log("Viewer replay snapshots: WebSocket, HTTP fallback and silent-socket recovery passed.");
 } finally {
   await browser.close();
 }
