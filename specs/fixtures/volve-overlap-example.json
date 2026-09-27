@@ -8,6 +8,8 @@
       "wellbore_id": "EXAMPLE-WELL-1-A",
       "ddr_refs": ["example-ddr.xml"],
       "telemetry_refs": ["example-log.xml"],
+      "ddr_periods": [{"start": "2026-01-01T00:00:00Z", "end": "2026-01-03T00:00:00Z"}],
+      "telemetry_periods": [{"start": "2026-01-02T00:00:00Z", "end": "2026-01-04T00:00:00Z"}],
       "time_depth_join_reviewed": false,
       "reviewed_loss_onsets": 0,
       "reviewed_no_event_intervals": 0

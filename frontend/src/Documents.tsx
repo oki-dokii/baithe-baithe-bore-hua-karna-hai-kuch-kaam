@@ -91,6 +91,9 @@ function Review({
   const [fields, setFields] = useState(candidate.current_fields);
   const [rationale, setRationale] = useState("");
   const [acknowledge, setAcknowledge] = useState(false);
+  const [onsetBasis, setOnsetBasis] = useState("unspecified");
+  const [onsetEarliest, setOnsetEarliest] = useState("");
+  const [onsetLatest, setOnsetLatest] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -125,6 +128,11 @@ function Review({
           rationale,
           fields,
           acknowledge_issues: acknowledge,
+          onset: {
+            basis: onsetBasis,
+            earliest: onsetBasis === "unspecified" ? null : onsetEarliest || null,
+            latest: onsetBasis === "unspecified" ? null : onsetLatest || null,
+          },
         }),
       });
       setSaved(true);
@@ -288,6 +296,41 @@ function Review({
         )}
         {canReview && candidate.state === "needs_review" && (
           <>
+            <label htmlFor="onset-basis">Incident onset timing · optional</label>
+            <select
+              id="onset-basis"
+              value={onsetBasis}
+              onChange={(e) => setOnsetBasis(e.target.value)}
+            >
+              <option value="unspecified">Not established</option>
+              <option value="exact_timelog">Exact timelog</option>
+              <option value="day_only_ddr">Reporting day only</option>
+              <option value="shift_report">Shift or bounded interval</option>
+            </select>
+            {onsetBasis !== "unspecified" && (
+              <>
+                <label htmlFor="onset-earliest">Earliest plausible onset · ISO 8601 with offset</label>
+                <input
+                  id="onset-earliest"
+                  type="text"
+                  value={onsetEarliest}
+                  onChange={(e) => setOnsetEarliest(e.target.value)}
+                  placeholder="2026-01-01T00:00:00+05:30"
+                />
+                <label htmlFor="onset-latest">Latest plausible onset · ISO 8601 with offset</label>
+                <input
+                  id="onset-latest"
+                  type="text"
+                  value={onsetLatest}
+                  onChange={(e) => setOnsetLatest(e.target.value)}
+                  placeholder="2026-01-01T23:59:59.999999+05:30"
+                />
+              </>
+            )}
+            <p className="footnote">
+              Use only source-supported bounds and explain them in the rationale.
+              Date-only or uncertain timing does not imply a precise pre-event ML label.
+            </p>
             <label htmlFor="rationale">Review rationale · required</label>
             <textarea
               id="rationale"

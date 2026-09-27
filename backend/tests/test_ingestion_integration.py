@@ -81,7 +81,7 @@ def test_upload_extract_review_and_permissions(report_kind):
     options = client.get("/api/v1/document-options", headers=reviewer).json()
     option = options[0]
     data = {"dataset_id": option["dataset_id"], "wellbore_id": option["wellbore_id"]}
-    text = f"SYNTHETIC TEST {uuid4()}\nDatum: RKB\nFormation: F1\nMud losses at 1000 ft MD.\nNo stuck pipe."
+    text = f"SYNTHETIC TEST {uuid4()}\nDatum: RKB\nFormation: F1\nMud losses at 1000 ft MD at 2026-01-01 10:00 UTC.\nNo stuck pipe."
     files = (
         {"file": ("owned-test.txt", text.encode(), "text/plain")}
         if report_kind == "text"
@@ -147,6 +147,13 @@ def test_upload_extract_review_and_permissions(report_kind):
         "rationale": "Verified against source page",
         "acknowledge_issues": True,
     }
+    if report_kind == "text":
+        payload["rationale"] = "Synthetic source line states 2026-01-01 10:00 UTC"
+        payload["onset"] = {
+            "basis": "exact_timelog",
+            "earliest": "2026-01-01T10:00:00Z",
+            "latest": "2026-01-01T10:00:00Z",
+        }
     assert (
         client.post(
             path + "/review", json=payload, headers=engineer | {"Idempotency-Key": str(uuid4())}
@@ -184,6 +191,12 @@ def test_upload_extract_review_and_permissions(report_kind):
         ).fetchone()
         assert float(event["start_md_m"]) == 304.8 and event["source_depth_unit"] == "ft"
         assert event["review_state"] == "approved" and event["quality_issues"]
+        if report_kind == "text":
+            assert event["onset_time_basis"] == "exact_timelog"
+            assert event["onset_time_earliest"] == event["onset_time_latest"]
+        else:
+            assert event["onset_time_basis"] == "unspecified"
+            assert event["onset_time_earliest"] is None
     # A reviewer may add missed evidence, but must cite an exact source span.
     manual = {
         "page_number": 1,

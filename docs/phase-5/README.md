@@ -28,6 +28,8 @@ The [public dataset audit](dataset-candidates.md) recommends Utah FORGE for a so
 
 A [local Volve-overlap inventory audit and transport-neutral feed-change harness](qualification-experiments.md) now exercise the *software checks* for file pairing, review gaps, duplicate/corrected/delayed readings and freshness. The only executed inventory and feed are owned synthetic examples. Actual Volve file overlap, WITSML protocol conformance and eRTMAC access remain unverified.
 
+The [temporal-label qualification refinement](temporal-label-qualification.md) separates approved historical event facts from prediction labels, records reviewer-supplied onset uncertainty, audits DDR/telemetry calendar overlap and checks pre-event/future-horizon eligibility without training. The original mud-loss depth-horizon contract remains provisional; hazard selection now depends on measured coverage.
+
 The official [3W dataset configuration](https://github.com/petrobras/3W/blob/main/dataset/dataset.ini), reporting dataset version 2.0.0 when inspected, lists production-flow/valve/hydrate events and production-system measurements. Its published class list does not supply drilling mud-loss, kick or stuck-pipe labels. **Not selected for this mud-loss target**; do not relabel its production events as drilling hazards. This is a metadata compatibility audit, not a downloaded-file qualification. No 3W files are included here.
 
 Volve remains a candidate for report/telemetry qualification, not a selected training dataset. OIL labeled telemetry has not been supplied. No real dataset currently passes the predictive gate.
