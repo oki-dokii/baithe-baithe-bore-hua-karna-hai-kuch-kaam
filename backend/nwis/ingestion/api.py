@@ -296,6 +296,14 @@ def review(
         if old:
             return old
         conn.execute("SELECT id FROM source_document WHERE id=%s FOR UPDATE", (document_id,))
+        if body.decision == "approve":
+            dataset = conn.execute(
+                """SELECT d.qualification_status FROM source_document s
+                JOIN dataset d ON d.id=s.dataset_id WHERE s.id=%s""",
+                (document_id,),
+            ).fetchone()
+            if dataset and dataset["qualification_status"] == "staged_unreviewed":
+                raise HTTPException(409, "Benchmark staging does not permit event approval")
         draft = conn.execute(
             "SELECT * FROM document_event_draft WHERE id=%s AND document_id=%s FOR UPDATE",
             (body.candidate_id, document_id),

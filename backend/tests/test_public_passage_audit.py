@@ -17,12 +17,14 @@ class Rows:
 
 
 class StubConnection:
-    def __init__(self, document_sha, page, approved_count):
+    def __init__(self, document_sha, page, approved_count, draft_count=0):
         self.document_sha = document_sha
         self.page = page
         self.approved_count = approved_count
+        self.draft_count = draft_count
         self.document_id = uuid4()
         self.passage_id = uuid4()
+        self.draft_id = uuid4()
 
     def execute(self, query, params):
         if "FROM source_document" in query:
@@ -42,6 +44,8 @@ class StubConnection:
                     }]
                 )
             return Rows([])
+        if "FROM document_event_draft" in query:
+            return Rows([{"id": self.draft_id, "state": "needs_review"}] * self.draft_count)
         raise AssertionError("Unexpected read-only query")
 
 
@@ -63,10 +67,21 @@ def test_audit_reports_candidates_without_claiming_approval_or_scoring():
     assert "Lost circulation at 1305 m" not in str(report)
 
 
-def test_page_without_approved_matching_event_is_not_mappable():
+def test_page_without_approved_matching_event_reports_only_draft_candidates():
+    reference = json.loads(REFERENCE.read_text())
+    questions = json.loads(QUESTIONS.read_text())
+    source = next(source for source in reference["sources"] if source["id"] == "NOD-399")
+    report = audit(reference, questions, uuid4(), StubConnection(source["sha256"], 23, 0, 1))
+    item = next(item for item in report["reference_items"] if item["reference_item_id"] == "R009")
+    assert item["state"] == "draft_review_required"
+    assert len(item["draft_candidates"]) == 1
+    assert not report["api_benchmark_ready"]
+
+
+def test_missing_draft_does_not_look_like_extraction_success():
     reference = json.loads(REFERENCE.read_text())
     questions = json.loads(QUESTIONS.read_text())
     source = next(source for source in reference["sources"] if source["id"] == "NOD-399")
     report = audit(reference, questions, uuid4(), StubConnection(source["sha256"], 23, 0))
     item = next(item for item in report["reference_items"] if item["reference_item_id"] == "R009")
-    assert item["state"] == "no_approved_matching_event"
+    assert item["state"] == "no_matching_draft"

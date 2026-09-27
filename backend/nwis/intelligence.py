@@ -140,7 +140,7 @@ def survey(conn, wellbore_id):
 
 def bore(conn, wellbore_id):
     row = conn.execute(
-        """SELECT b.*,w.dataset_id,w.name,w.basin_name,d.kind AS data_kind,
+        """SELECT b.*,w.dataset_id,w.name,w.basin_name,w.status AS well_status,d.kind AS data_kind,
         ST_X(w.surface_point::geometry) AS longitude,ST_Y(w.surface_point::geometry) AS latitude
         FROM wellbore b JOIN well w ON w.id=b.well_id JOIN dataset d ON d.id=w.dataset_id WHERE b.id=%s""",
         (wellbore_id,),
@@ -157,6 +157,7 @@ def wellbores(_principal=Depends(current_principal)):
             "items": conn.execute("""SELECT b.id,w.id AS well_id,w.name,b.external_id,w.dataset_id,
             d.kind AS data_kind,ST_X(w.surface_point::geometry) AS longitude,ST_Y(w.surface_point::geometry) AS latitude
             FROM wellbore b JOIN well w ON w.id=b.well_id JOIN dataset d ON d.id=w.dataset_id
+            WHERE w.status<>'benchmark_unlocated'
             ORDER BY w.name,b.id LIMIT 100""").fetchall(),
             "limit": 100,
         }
@@ -183,6 +184,8 @@ def analogues(
 ):
     with connection() as conn:
         active = bore(conn, wellbore_id)
+        if active["well_status"] == "benchmark_unlocated":
+            raise HTTPException(422, "Benchmark-only wells have no verified map location")
         target = next(
             (i for i in interval_rows(conn, wellbore_id) if i["id"] == target_interval_id), None
         )
@@ -194,7 +197,8 @@ def analogues(
             ST_Distance(w.surface_point,a.surface_point) AS surface_distance_m
             FROM well a JOIN well w ON w.dataset_id=a.dataset_id AND w.id<>a.id
             JOIN wellbore b ON b.well_id=w.id JOIN dataset d ON d.id=w.dataset_id
-            WHERE a.id=%s AND ST_DWithin(w.surface_point,a.surface_point,%s)
+            WHERE a.id=%s AND w.status<>'benchmark_unlocated'
+              AND ST_DWithin(w.surface_point,a.surface_point,%s)
             ORDER BY surface_distance_m,b.id LIMIT 101""",
             (active["well_id"], radius_km * 1000),
         ).fetchall()
