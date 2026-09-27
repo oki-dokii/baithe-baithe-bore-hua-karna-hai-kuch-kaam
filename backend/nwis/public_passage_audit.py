@@ -28,6 +28,7 @@ def audit(reference: dict, questions: dict, dataset_id: UUID, conn) -> dict:
     for item in reference["items"]:
         document = documents[item["source_id"]]
         pages = []
+        drafts = []
         if document:
             pages = conn.execute(
                 """SELECT p.id AS passage_id,p.text_version,
@@ -40,6 +41,15 @@ def audit(reference: dict, questions: dict, dataset_id: UUID, conn) -> dict:
                 GROUP BY p.id,p.text_version ORDER BY p.text_version DESC,p.id""",
                 (item["event_type"], document["id"], item["pdf_page"]),
             ).fetchall()
+            if item["kind"] == "observed_event":
+                drafts = conn.execute(
+                    """SELECT c.id,c.state FROM document_event_draft c
+                    JOIN extracted_passage p ON p.id=c.passage_id
+                    WHERE c.document_id=%s AND p.page_number=%s
+                      AND c.current_fields->>'event_type'=%s
+                    ORDER BY c.created_at,c.id""",
+                    (document["id"], item["pdf_page"], item["event_type"]),
+                ).fetchall()
         # One extracted passage is currently a whole page. Even an approved
         # event on that page does not establish which reference item it proves.
         if item["id"] == "R002":
@@ -50,10 +60,12 @@ def audit(reference: dict, questions: dict, dataset_id: UUID, conn) -> dict:
             state = "document_missing"
         elif not pages:
             state = "page_missing"
-        elif not any(row["approved_matching_event_count"] for row in pages):
-            state = "no_approved_matching_event"
-        else:
+        elif any(row["approved_matching_event_count"] for row in pages):
             state = "claim_level_review_required"
+        elif drafts:
+            state = "draft_review_required"
+        else:
+            state = "no_matching_draft"
         items.append(
             {
                 "reference_item_id": item["id"],
@@ -61,6 +73,9 @@ def audit(reference: dict, questions: dict, dataset_id: UUID, conn) -> dict:
                 "pdf_page": item["pdf_page"],
                 "kind": item["kind"],
                 "state": state,
+                "draft_candidates": [
+                    {"draft_id": str(row["id"]), "state": row["state"]} for row in drafts
+                ],
                 "page_candidates": [
                     {
                         "passage_id": str(row["passage_id"]),

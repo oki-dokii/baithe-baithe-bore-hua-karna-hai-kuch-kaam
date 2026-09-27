@@ -19,13 +19,13 @@ backend/.venv/bin/python -m nwis.public_reference --raw-dir data/raw/sodir
 
 The second command verifies SHA-256 and PDF page counts against the three ignored originals. It reports counts and gate flags only; it does not approve any event or publish report text. Unit tests reject malformed source/page IDs, missing event types, incorrect no-support answers and falsely elevated approval status. The machine-readable set must be frozen before tuning extraction/retrieval to it; changes need a documented revision.
 
-To inspect how locally ingested copies line up with the frozen reference pages, run the read-only candidate audit from `backend` with a **public-report dataset** UUID:
+The [isolated ingestion run](public-benchmark-ingestion-2026-09-27.md) now has all three pinned PDFs staged as unreviewed documents. To inspect how those local copies line up with the frozen reference pages, run the read-only candidate audit from `backend` with its **public-report dataset** UUID:
 
 ```sh
 .venv/bin/python -m nwis.public_passage_audit --dataset-id YOUR_PUBLIC_DATASET_UUID
 ```
 
-It matches documents by pinned PDF hash, lists page passage UUIDs and counts approved events of the matching hazard type. It emits no report text and writes no database records. `claim_level_review_required` means only that an approved event occurs on the same page: a reviewer must still establish that the exact reference statement supports that specific event and question. `R002` is always `disputed_depth_blocked`; this audit cannot clear the 25/10-2 R depth conflict. Hard negatives and contextual facts are marked `not_event_indexed`, because current search indexes approved event claims, not arbitrary report facts. Consequently the 18-question reference set is **not** directly scorable as an event-retrieval benchmark, even after page IDs are present; separate event-retrieval and report-QA scopes before assigning scores.
+It matches documents by pinned PDF hash, lists page passage UUIDs, same-hazard draft IDs and counts approved events of the matching hazard type. It emits no report text and writes no database records. `draft_review_required` is only a page-level candidate, **not** a correct extraction. `claim_level_review_required` means an approved event occurs on the same page, but a reviewer must still establish that the exact reference statement supports that specific event and question. `R002` is always `disputed_depth_blocked`; this audit cannot clear the 25/10-2 R depth conflict. Hard negatives and contextual facts are marked `not_event_indexed`, because current search indexes approved event claims, not arbitrary report facts. Consequently the 18-question reference set is **not** directly scorable as an event-retrieval benchmark, even after page IDs are present; separate event-retrieval and report-QA scopes before assigning scores.
 
 ## Initial local-rules probe, not a benchmark score
 

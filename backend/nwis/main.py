@@ -150,7 +150,8 @@ def wells(
                       ST_X(w.surface_point::geometry) AS longitude,
                       ST_Y(w.surface_point::geometry) AS latitude
                FROM well w JOIN dataset d ON d.id=w.dataset_id
-               WHERE (%s::text IS NULL OR d.kind=%s)
+               WHERE w.status<>'benchmark_unlocated'
+                 AND (%s::text IS NULL OR d.kind=%s)
                ORDER BY d.kind, w.external_id, w.id LIMIT %s OFFSET %s""",
             (kind, kind, limit + 1, offset),
         ).fetchall()
@@ -172,7 +173,8 @@ def nearby_wells(
 ):
     with connection() as conn:
         active = conn.execute(
-            "SELECT id, dataset_id, surface_point FROM well WHERE id=%s", (active_well_id,)
+            "SELECT id, dataset_id, surface_point FROM well WHERE id=%s AND status<>'benchmark_unlocated'",
+            (active_well_id,),
         ).fetchone()
         if active is None:
             raise HTTPException(status_code=404, detail="Active well not found")
@@ -183,7 +185,8 @@ def nearby_wells(
                       ST_Distance(w.surface_point, a.surface_point) AS surface_distance_m
                FROM well a JOIN well w ON w.dataset_id=a.dataset_id AND w.id<>a.id
                JOIN dataset d ON d.id=w.dataset_id
-               WHERE a.id=%s AND ST_DWithin(w.surface_point, a.surface_point, %s)
+               WHERE a.id=%s AND w.status<>'benchmark_unlocated'
+                 AND ST_DWithin(w.surface_point, a.surface_point, %s)
                ORDER BY surface_distance_m, w.id LIMIT %s""",
             (active_well_id, radius_km * 1000, limit),
         ).fetchall()
