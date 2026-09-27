@@ -1,0 +1,26 @@
+{
+  "schema_version": "public-retrieval-questions-v1",
+  "status": "frozen_reference_questions_not_api_scored",
+  "reference_manifest": "public-report-reference-v1.json",
+  "notes": "Reference IDs are page-verified analyst labels, not approved database passage UUIDs. Do not run nwis.retrieval_eval or report recall@5 until source review and passage-ID mapping are complete.",
+  "questions": [
+    {"id":"PQ01","question":"What lost-circulation depth does the 25/10-2 R report itself state?","scope":["NOD-511"],"answerability":"supported_with_conflict","expected_reference_item_ids":["R002"]},
+    {"id":"PQ02","question":"Does 7,262 ft identify the onset of stuck pipe or the bottom of the fish?","scope":["NOD-511"],"answerability":"supported","expected_reference_item_ids":["R003"]},
+    {"id":"PQ03","question":"What followed the stuck-pipe event in 25/10-2 R?","scope":["NOD-511"],"answerability":"supported","expected_reference_item_ids":["R003","R004"]},
+    {"id":"PQ04","question":"Can the original drilling phase to 7,187 ft be described as a mud-loss incident?","scope":["NOD-511"],"answerability":"contradicted","expected_reference_item_ids":["R001"]},
+    {"id":"PQ05","question":"Which depth was the first reported loss of circulation in the 31/2-6 summary?","scope":["NOD-399"],"answerability":"supported","expected_reference_item_ids":["R009"]},
+    {"id":"PQ06","question":"How was circulation regained after the 1,305 m loss?","scope":["NOD-399"],"answerability":"supported","expected_reference_item_ids":["R009","R010"]},
+    {"id":"PQ07","question":"What was reported at 1,485 m in 31/2-6 and what happened after Mica was added?","scope":["NOD-399"],"answerability":"supported","expected_reference_item_ids":["R011","R012"]},
+    {"id":"PQ08","question":"Does the 1,400 m tight-hole statement establish stuck pipe in 31/2-6?","scope":["NOD-399"],"answerability":"contradicted","expected_reference_item_ids":["R013"]},
+    {"id":"PQ09","question":"Was the 825 m leak-off test itself an uncontrolled lost-circulation incident?","scope":["NOD-399"],"answerability":"contradicted","expected_reference_item_ids":["R008"]},
+    {"id":"PQ10","question":"At what explicitly stated MD and datum did 35/7-1 S lose circulation?","scope":["NOD-6599"],"answerability":"supported","expected_reference_item_ids":["R015"]},
+    {"id":"PQ11","question":"Was the 40 m figure a loss depth, a loss volume, or a riser mud-level drop?","scope":["NOD-6599"],"answerability":"supported","expected_reference_item_ids":["R016"]},
+    {"id":"PQ12","question":"Did LCM and cement regain circulation in the original 17.5-inch section?","scope":["NOD-6599"],"answerability":"supported","expected_reference_item_ids":["R017"]},
+    {"id":"PQ13","question":"Was the 3,876 m flow check positive?","scope":["NOD-6599"],"answerability":"contradicted","expected_reference_item_ids":["R019"]},
+    {"id":"PQ14","question":"At what depth and volume was a positive flow reported before shut-in?","scope":["NOD-6599"],"answerability":"supported","expected_reference_item_ids":["R020"]},
+    {"id":"PQ15","question":"Were returns lost during the later 20 SPM kill operation?","scope":["NOD-6599"],"answerability":"supported","expected_reference_item_ids":["R021"]},
+    {"id":"PQ16","question":"What mud-loss depth was recorded for an Oil India Limited Assam well in these Norwegian reports?","scope":["NOD-511","NOD-399","NOD-6599"],"answerability":"no_support","expected_reference_item_ids":[]},
+    {"id":"PQ17","question":"What measured probability of stuck pipe do these completion reports provide for a future OIL well?","scope":["NOD-511","NOD-399","NOD-6599"],"answerability":"no_support","expected_reference_item_ids":[]},
+    {"id":"PQ18","question":"How do the 7733 ft, 7745 ft and 7773 ft loss references in 25/10-2 R relate without choosing an approved onset?","scope":["NOD-511"],"answerability":"supported_with_conflict","expected_reference_item_ids":["R002","R023","R024","R025"]}
+  ]
+}
