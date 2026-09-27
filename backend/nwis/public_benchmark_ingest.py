@@ -164,15 +164,46 @@ def process_one() -> dict:
     }
 
 
+def status() -> dict:
+    guard()
+    with connection() as conn:
+        datasets = conn.execute("SELECT id,qualification_status FROM dataset").fetchall()
+        if len(datasets) != 1 or datasets[0] != {
+            "id": DATASET_ID,
+            "qualification_status": "staged_unreviewed",
+        }:
+            raise ValueError("Benchmark database is missing its isolated staging dataset")
+        rows = conn.execute(
+            """SELECT d.filename,d.ingest_status,d.page_count,
+               count(DISTINCT c.id) AS draft_count
+               FROM source_document d LEFT JOIN document_event_draft c ON c.document_id=d.id
+               WHERE d.dataset_id=%s GROUP BY d.id ORDER BY d.filename""",
+            (DATASET_ID,),
+        ).fetchall()
+        approved = conn.execute(
+            "SELECT count(*) AS n FROM drilling_event WHERE review_state='approved'"
+        ).fetchone()["n"]
+    if approved:
+        raise ValueError("Benchmark staging database contains approved events")
+    return {
+        "dataset_id": str(DATASET_ID),
+        "qualification_status": "staged_unreviewed",
+        "documents": rows,
+        "approved_events": 0,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage pinned public PDFs without approving events")
-    parser.add_argument("action", choices=("prepare", "process-one"))
+    parser.add_argument("action", choices=("prepare", "process-one", "status"))
     parser.add_argument("--raw-dir", type=Path, default=Path("../data/raw/sodir"))
     args = parser.parse_args()
     if args.action == "prepare":
         result = prepare(json.loads(REFERENCE.read_text()), json.loads(QUESTIONS.read_text()), args.raw_dir)
-    else:
+    elif args.action == "process-one":
         result = process_one()
+    else:
+        result = status()
     print(json.dumps(result, indent=2), flush=True)
 
 

@@ -37,6 +37,7 @@ type Doc = {
   ingest_status: string;
   page_count: number | null;
   kind: string;
+  qualification_status: string;
 };
 type Detail = Doc & {
   review_version: number;
@@ -56,7 +57,7 @@ type Option = {
   name: string;
   kind: string;
 };
-type Identity = { role: string; extraction_provider: string };
+type Identity = { role: string; extraction_provider: string; document_max_pages: number };
 const human = (value: string) => value.replaceAll("_", " ");
 async function api<T>(
   token: string,
@@ -81,12 +82,14 @@ function Review({
   documentId,
   onSaved,
   canReview,
+  approvalBlocked,
 }: {
   candidate: Candidate;
   token: string;
   documentId: string;
   onSaved: () => void;
   canReview: boolean;
+  approvalBlocked: boolean;
 }) {
   const [fields, setFields] = useState(candidate.current_fields);
   const [rationale, setRationale] = useState("");
@@ -296,6 +299,13 @@ function Review({
         )}
         {canReview && candidate.state === "needs_review" && (
           <>
+            {approvalBlocked && (
+              <p className="quality-note">
+                Benchmark staging · approval is locked. Inspect the source,
+                record corrections or reject unsupported drafts; do not treat
+                these as operational evidence.
+              </p>
+            )}
             <label htmlFor="onset-basis">Incident onset timing · optional</label>
             <select
               id="onset-basis"
@@ -353,9 +363,11 @@ function Review({
               recommendation.
             </p>
             <div className="decision-actions">
-              <button type="button" onClick={() => decide("approve")}>
-                {busy ? "Saving…" : "Approve evidence"}
-              </button>
+              {!approvalBlocked && (
+                <button type="button" onClick={() => decide("approve")}>
+                  {busy ? "Saving…" : "Approve evidence"}
+                </button>
+              )}
               <button
                 type="button"
                 className="secondary"
@@ -650,7 +662,9 @@ export default function Documents({ token }: { token: string }) {
               required
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
-            <p className="footnote">25 MB maximum · 50 pages · English OCR</p>
+            <p className="footnote">
+              25 MB maximum · {identity?.document_max_pages ?? 50} pages · English OCR
+            </p>
           </div>
           <div>
             <label htmlFor="upload-well">Link to wellbore</label>
@@ -873,6 +887,7 @@ export default function Documents({ token }: { token: string }) {
                 token={token}
                 documentId={detail.id}
                 canReview={canReview}
+                approvalBlocked={detail.qualification_status === "staged_unreviewed"}
                 onSaved={() => {
                   setRevision((r) => r + 1);
                   setNotice("Review decision recorded with your rationale.");

@@ -1,0 +1,25 @@
+{
+  "schema_version": "public-retrieval-scope-v1",
+  "status": "development_diagnostic_not_held_out",
+  "note": "This fixed question set informed extraction-rule changes on 2026-09-27. Do not call its future scores independent or held-out. Event-only retrieval cannot answer report-fact and conflict questions.",
+  "cases": [
+    {"id":"PQ01","scope":"conflict_blocked"},
+    {"id":"PQ02","scope":"report_fact_qa"},
+    {"id":"PQ03","scope":"report_fact_qa"},
+    {"id":"PQ04","scope":"report_fact_qa"},
+    {"id":"PQ05","scope":"event_retrieval"},
+    {"id":"PQ06","scope":"report_fact_qa"},
+    {"id":"PQ07","scope":"report_fact_qa"},
+    {"id":"PQ08","scope":"report_fact_qa"},
+    {"id":"PQ09","scope":"report_fact_qa"},
+    {"id":"PQ10","scope":"event_retrieval"},
+    {"id":"PQ11","scope":"report_fact_qa"},
+    {"id":"PQ12","scope":"report_fact_qa"},
+    {"id":"PQ13","scope":"report_fact_qa"},
+    {"id":"PQ14","scope":"event_retrieval"},
+    {"id":"PQ15","scope":"event_retrieval"},
+    {"id":"PQ16","scope":"event_retrieval"},
+    {"id":"PQ17","scope":"event_retrieval"},
+    {"id":"PQ18","scope":"conflict_blocked"}
+  ]
+}
