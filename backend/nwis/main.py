@@ -17,12 +17,14 @@ from nwis.ingestion.api import router as ingestion_router
 from nwis.intelligence import router as intelligence_router
 from nwis.operations import router as operations_router
 from nwis.prediction import router as prediction_router
+from nwis.report_facts import router as report_facts_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
 app.include_router(ingestion_router)
 app.include_router(intelligence_router)
 app.include_router(operations_router)
 app.include_router(prediction_router)
+app.include_router(report_facts_router)
 _fixture_path = Path(__file__).resolve().parents[1] / "specs/fixtures/golden-demo.json"
 if not _fixture_path.is_file():
     _fixture_path = Path(__file__).resolve().parents[2] / "specs/fixtures/golden-demo.json"
