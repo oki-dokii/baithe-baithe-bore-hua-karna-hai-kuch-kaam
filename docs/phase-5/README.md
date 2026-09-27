@@ -26,6 +26,8 @@ All sidetracks and synthetic replicas must share the physical-well ID. The valid
 
 The [public dataset audit](dataset-candidates.md) recommends Utah FORGE for a source-qualification pilot and Volve as the petroleum-domain follow-up. Direct header inspection found useful 16A/56-32 telemetry, but no mud-density column in either sampled CSV and no adjudicated mud-loss onset label. The 16A daily summary contains a seepage-loss narrative, not an exact onset. No public source has passed the training gate.
 
+A [local Volve-overlap inventory audit and transport-neutral feed-change harness](qualification-experiments.md) now exercise the *software checks* for file pairing, review gaps, duplicate/corrected/delayed readings and freshness. The only executed inventory and feed are owned synthetic examples. Actual Volve file overlap, WITSML protocol conformance and eRTMAC access remain unverified.
+
 The official [3W dataset configuration](https://github.com/petrobras/3W/blob/main/dataset/dataset.ini), reporting dataset version 2.0.0 when inspected, lists production-flow/valve/hydrate events and production-system measurements. Its published class list does not supply drilling mud-loss, kick or stuck-pipe labels. **Not selected for this mud-loss target**; do not relabel its production events as drilling hazards. This is a metadata compatibility audit, not a downloaded-file qualification. No 3W files are included here.
 
 Volve remains a candidate for report/telemetry qualification, not a selected training dataset. OIL labeled telemetry has not been supplied. No real dataset currently passes the predictive gate.

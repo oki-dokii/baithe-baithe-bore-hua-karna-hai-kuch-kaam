@@ -1,0 +1,25 @@
+{
+  "schema_version": "volve-overlap-v1",
+  "inventory_reference": "owned synthetic metadata example; replace with a local permitted Volve inventory",
+  "source_kind": "synthetic_example",
+  "wellbores": [
+    {
+      "physical_well_id": "EXAMPLE-WELL-1",
+      "wellbore_id": "EXAMPLE-WELL-1-A",
+      "ddr_refs": ["example-ddr.xml"],
+      "telemetry_refs": ["example-log.xml"],
+      "time_depth_join_reviewed": false,
+      "reviewed_loss_onsets": 0,
+      "reviewed_no_event_intervals": 0
+    },
+    {
+      "physical_well_id": "EXAMPLE-WELL-2",
+      "wellbore_id": "EXAMPLE-WELL-2-A",
+      "ddr_refs": ["example-ddr-2.pdf"],
+      "telemetry_refs": [],
+      "time_depth_join_reviewed": false,
+      "reviewed_loss_onsets": 0,
+      "reviewed_no_event_intervals": 0
+    }
+  ]
+}
