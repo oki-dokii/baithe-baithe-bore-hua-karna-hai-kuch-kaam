@@ -2,7 +2,7 @@
 
 ## Current capability
 
-No predictive model has been trained or deployed. Historical alerts continue to use the Phase 4 evidence rule. This delivery adds a model-readiness workspace, authenticated readiness/current-risk APIs, and a local JSON-window qualification command. ML-01 remains unmet; ML-02's unavailable-score path is implemented, not its trained-model path.
+No **real-data predictive model** has been trained or deployed. Historical alerts continue to use the Phase 4 evidence rule. The [offline synthetic training rehearsal](synthetic-training-pipeline.md) fits a demo-only logistic artifact without changing the authenticated readiness/current-risk APIs. ML-01 remains unmet; ML-02's unavailable-score path is implemented, not its validated-model path.
 
 The first **proposed** task is mud-loss onset in `(anchor MD, anchor MD + 100 m]` during forward drilling. It differs from Phase 4's offset-event lookahead. Prediction excludes events already ongoing at the anchor. Full 100 m observed outcome coverage is required even for positives in this initial contract. No-event labels require reviewed coverage, not merely an absence of report mentions. The horizon and feature choices require domain review.
 
