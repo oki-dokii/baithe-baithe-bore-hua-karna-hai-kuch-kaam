@@ -9,17 +9,18 @@ from nwis.ingestion.contracts import Candidate, CandidateBatch, IngestionFailure
 
 PROMPT_VERSION = "events-v1"
 SCHEMA_VERSION = "candidate-v1"
-RULES_VERSION = "conservative-rules-v1"
+RULES_VERSION = "conservative-rules-v2"
 
 HAZARDS = {
     "mud_loss": r"\b(?:mud losses?|lost circulation|losses of mud)\b",
     "stuck_pipe": r"\b(?:stuck pipe|pipe (?:became |was )?stuck)\b",
-    "kick": r"\b(?:kick|kicks)\b",
+    "kick": r"\b(?:kick|kicks|positive flow|flow check (?:was |is )?positive)\b",
     "overpressure": r"\boverpressur(?:e|ed)\b",
     "torque_spike": r"\btorque spikes?\b",
     "tight_hole": r"\btight hole\b",
     "fishing": r"\bfishing (?:operation|attempt)s?\b",
     "cementing_issue": r"\b(?:cementing (?:failure|issue)|gas migration|remedial squeeze)\b",
+    "other": r"\b(?:lost|losing|loosing)\s+(?:(?:\d+|one|two|three|four|five|six|seven|eight)\s+)?cones?\b",
 }
 
 
@@ -34,7 +35,12 @@ def local_candidates(text: str) -> list[Candidate]:
     datum = field(text, "(?:depth )?datum")
     formation = field(text, "formation")
     for paragraph in re.split(r"\n\s*\n", text):
-        for sentence in re.split(r"(?<=[.!?])\s+|\n", paragraph):
+        # PDF/OCR line wraps are not sentence boundaries. Preserve adjacent
+        # depth and incident clauses before looking for a cited event span.
+        paragraph = " ".join(line.strip() for line in paragraph.splitlines())
+        for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+            if len(sentence.strip()) > 2000:
+                continue  # Fail closed rather than aborting a whole page on a merged OCR block.
             for kind, pattern in HAZARDS.items():
                 match = re.search(pattern, sentence, re.I)
                 if not match:
@@ -50,6 +56,10 @@ def local_candidates(text: str) -> list[Candidate]:
                     sentence,
                     re.I,
                 )
+                if kind == "stuck_pipe" and re.search(
+                    r"\b(?:bottom of (?:the )?fish|fish bottom)\b", sentence, re.I
+                ):
+                    depth = None  # Fish location is not the stuck-pipe onset.
                 start = float(depth[1].replace(",", "")) if depth else None
                 end = float(depth[2].replace(",", "")) if depth and depth[2] else start
                 result.append(

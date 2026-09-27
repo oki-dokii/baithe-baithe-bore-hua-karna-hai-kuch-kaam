@@ -61,6 +61,29 @@ def test_report_depth_of_phrase_keeps_axis_and_datum_unknown():
     assert found[0].depth_axis is None and found[0].depth_datum is None
 
 
+def test_wrapped_positive_flow_and_cone_loss_are_drafts_not_inferred_onsets():
+    text = (
+        "A flow check at 3876 m was negative. "
+        "A later flow check was performed at 3893 m and a 400 L\n"
+        "positive flow was reported before shut-in.\n\n"
+        "Later the pipe became stuck, with the fish bottom at 7262 feet. "
+        "The crew reported loosing six cones while drilling at 8192 feet."
+    )
+    found = extract.local_candidates(text)
+    assert [(item.event_type, item.depth_start) for item in found] == [
+        ("kick", 3893),
+        ("stuck_pipe", None),
+        ("other", 8192),
+    ]
+    assert all(extract.quote_is_supported(item.quote, text) for item in found)
+    assert all(item.depth_axis is None for item in found)
+
+
+def test_negative_flow_check_and_no_losses_do_not_become_events():
+    text = "Flow check at 3876 m was negative. The sidetrack had no lost circulation problems."
+    assert extract.local_candidates(text) == []
+
+
 def test_private_reports_never_call_remote_provider(monkeypatch):
     monkeypatch.setattr(
         extract, "get_settings", lambda: SimpleNamespace(extraction_provider="openai_compatible")

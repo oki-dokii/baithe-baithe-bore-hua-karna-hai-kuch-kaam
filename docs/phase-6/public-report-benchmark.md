@@ -19,6 +19,8 @@ backend/.venv/bin/python -m nwis.public_reference --raw-dir data/raw/sodir
 
 The second command verifies SHA-256 and PDF page counts against the three ignored originals. It reports counts and gate flags only; it does not approve any event or publish report text. Unit tests reject malformed source/page IDs, missing event types, incorrect no-support answers and falsely elevated approval status. The machine-readable set must be frozen before tuning extraction/retrieval to it; changes need a documented revision.
 
+The reference set is now a **development diagnostic**, because its pages were used to refine conservative extraction rules v2. It is not an independent held-out test set. A separate untouched corpus is required for unbiased accuracy claims. The [question-scope manifest](../../specs/evaluation/public-retrieval-scope-v1.json) classifies the 18 fixed questions as 6 event-retrieval, 10 report-fact QA and 2 conflict-blocked; it does not map them to approved passage IDs or create a score.
+
 The [isolated ingestion run](public-benchmark-ingestion-2026-09-27.md) now has all three pinned PDFs staged as unreviewed documents. To inspect how those local copies line up with the frozen reference pages, run the read-only candidate audit from `backend` with its **public-report dataset** UUID:
 
 ```sh
@@ -35,6 +37,6 @@ The existing conservative extractor was run read-only on OCR from NOD-511 page 7
 
 1. Independent domain reviewer confirms event boundaries, depths/datum, wellbore attribution and rights before these labels become a gold set. The NOD-511 loss depth needs an independent DDR/log or an explicit conflict adjudication; no source-derived alert may use it in the meantime.
 2. Ingest qualified files locally with the appropriate page cap and preserve database passage UUIDs. Map the fixed question references to **approved** passage UUIDs, then use `nwis.retrieval_eval` to measure recall@5 and abstention. The current JSON question set is not directly executable against that API and no public-report retrieval score is claimed.
-3. Evaluate extraction on held-out pages with a defined candidate-to-reference match rule and count true/false positives, missing fields and citation correctness. Keep evaluation pages out of tuning examples. A visual page check by this assistant is not independent domain review.
+3. Evaluate extraction on a **new, untouched held-out corpus** with a defined candidate-to-reference match rule and count true/false positives, missing fields and citation correctness. These three reports can support development diagnostics only. A visual page check by this assistant is not independent domain review.
 
 NOD's [content policy](https://www.sodir.no/en/about-us/use-of-content/) and [released-data guidance](https://www.sodir.no/en/facts/data-and-analyses/release-of-data/use-of-released-data/) should be rechecked before any report redistribution or deployment. This repository commits only source links, identifiers, hashes and short paraphrased annotations.

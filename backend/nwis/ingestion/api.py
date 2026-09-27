@@ -48,6 +48,7 @@ def me(principal: Principal = Depends(current_principal)):
         "name": principal.name,
         "role": principal.role,
         "extraction_provider": get_settings().extraction_provider,
+        "document_max_pages": get_settings().document_max_pages,
     }
 
 
@@ -168,6 +169,7 @@ def documents(principal=Depends(current_principal)):
     with connection() as conn:
         return conn.execute(
             """SELECT d.id,d.filename,d.ingest_status,d.page_count,d.created_at,ds.kind,
+            ds.qualification_status,
             (SELECT count(*) FROM document_event_draft c WHERE c.document_id=d.id AND c.state='needs_review') AS pending_count
             FROM source_document d JOIN dataset ds ON ds.id=d.dataset_id WHERE d.uploaded_by IS NOT NULL
             AND (%s OR d.uploaded_by=%s OR EXISTS(SELECT 1 FROM document_event_draft c WHERE c.document_id=d.id AND c.state='approved'))
@@ -194,6 +196,9 @@ def get_document(conn, document_id, principal):
 def detail(document_id: UUID, principal=Depends(current_principal)):
     with connection() as conn:
         document, reviewer = get_document(conn, document_id, principal)
+        qualification = conn.execute(
+            "SELECT qualification_status FROM dataset WHERE id=%s", (document["dataset_id"],)
+        ).fetchone()["qualification_status"]
         candidates = conn.execute(
             """SELECT c.*,p.page_number FROM document_event_draft c
             JOIN extracted_passage p ON p.id=c.passage_id WHERE c.document_id=%s AND (%s OR c.state='approved')
@@ -230,6 +235,7 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
         return {
             "id": document_id,
             "filename": document["filename"],
+            "qualification_status": qualification,
             "ingest_status": document["ingest_status"],
             "review_version": document["review_version"],
             "pages": pages,
