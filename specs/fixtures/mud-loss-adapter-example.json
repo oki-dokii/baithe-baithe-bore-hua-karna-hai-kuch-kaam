@@ -1,0 +1,60 @@
+{
+  "schema_version": "mud-loss-adapter-input-v1",
+  "kind": "synthetic",
+  "source_reference": "owned synthetic adapter example, not a real well",
+  "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "permission_reference": "owned synthetic fixture",
+  "domain_reviewed": false,
+  "anchors": [{
+    "sample_id": "synthetic-anchor-a",
+    "physical_well_id": "synthetic-well-a",
+    "wellbore_id": "synthetic-bore-a",
+    "split": "train",
+    "observed_at": "2026-01-01T00:00:00+00:00",
+    "available_at": "2026-01-01T00:00:00+00:00",
+    "md_m": 1000,
+    "quality": "good",
+    "rig_state": "forward_drilling",
+    "source_record_id": "owned-sensor-row-1",
+    "features": {
+      "rop_m_per_h": 10,
+      "wob_kn": 40,
+      "rpm": 90,
+      "torque_kn_m": 8,
+      "flow_in_l_per_min": 1000
+    }
+  }],
+  "mud_density": [{
+    "wellbore_id": "synthetic-bore-a",
+    "source_record_id": "owned-mud-program-page-1",
+    "source_kind": "reviewed_mud_program",
+    "recorded_at": "2025-12-31T00:00:00+00:00",
+    "effective_from": "2025-12-31T00:00:00+00:00",
+    "effective_until": null,
+    "top_md_m": 900,
+    "base_md_m": 1200,
+    "mud_density_kg_per_m3": 1200,
+    "reviewed": true
+  }],
+  "coverage": [{
+    "wellbore_id": "synthetic-bore-a",
+    "source_reference": "owned-reviewed-coverage-1",
+    "top_md_m": 900,
+    "base_md_m": 1100,
+    "from_time": "2025-12-31T23:00:00+00:00",
+    "observed_through_at": "2026-01-01T02:00:00+00:00",
+    "reviewed": true,
+    "event_free_reviewed": false
+  }],
+  "losses": [{
+    "event_id": "owned-event-1",
+    "wellbore_id": "synthetic-bore-a",
+    "onset_md_m": 1050,
+    "onset_earliest": "2026-01-01T00:30:00+00:00",
+    "onset_latest": "2026-01-01T00:30:00+00:00",
+    "onset_basis": "exact_timelog",
+    "event_reviewed": true,
+    "source_passage_id": "owned-page-1",
+    "depth_datum_reviewed": true
+  }]
+}
