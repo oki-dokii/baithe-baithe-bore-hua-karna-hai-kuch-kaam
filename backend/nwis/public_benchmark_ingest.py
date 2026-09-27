@@ -59,8 +59,9 @@ def prepare(reference: dict, questions: dict, raw_dir: Path) -> dict:
         if not datasets:
             conn.execute(
                 """INSERT INTO dataset(id,external_id,name,kind,source_url,version,
-                   license_reference,qualification_status)
-                   VALUES(%s,%s,%s,'public',%s,%s,%s,'staged_unreviewed')""",
+                   license_reference,qualification_status,origin_kind,authorization_state,applicability)
+                   VALUES(%s,%s,%s,'public',%s,%s,%s,'staged_unreviewed',
+                   'public_primary','unverified','review_only')""",
                 (
                     DATASET_ID,
                     DATASET_EXTERNAL_ID,

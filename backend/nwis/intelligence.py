@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nwis.db import connection
+from nwis.provenance import may_approve_event
 from nwis.config import get_settings
 from nwis.ingestion.contracts import Hazard
 from nwis.security import current_principal
@@ -141,6 +142,7 @@ def survey(conn, wellbore_id):
 def bore(conn, wellbore_id):
     row = conn.execute(
         """SELECT b.*,w.dataset_id,w.name,w.basin_name,w.status AS well_status,d.kind AS data_kind,
+        d.origin_kind,d.authorization_state,d.applicability,d.qualification_status,
         ST_X(w.surface_point::geometry) AS longitude,ST_Y(w.surface_point::geometry) AS latitude
         FROM wellbore b JOIN well w ON w.id=b.well_id JOIN dataset d ON d.id=w.dataset_id WHERE b.id=%s""",
         (wellbore_id,),
@@ -193,6 +195,7 @@ def analogues(
             raise HTTPException(422, "Select a reviewed interval belonging to the active wellbore")
         candidates = conn.execute(
             """SELECT b.id,w.name,w.id AS well_id,d.kind AS data_kind,
+            d.origin_kind,d.authorization_state,d.applicability,d.qualification_status,
             ST_X(w.surface_point::geometry) AS longitude,ST_Y(w.surface_point::geometry) AS latitude,
             ST_Distance(w.surface_point,a.surface_point) AS surface_distance_m
             FROM well a JOIN well w ON w.dataset_id=a.dataset_id AND w.id<>a.id
@@ -225,10 +228,14 @@ def analogues(
                 if thickness is not None
                 else components["same_reviewed_formation"]
             )
-            events = conn.execute(
-                "SELECT * FROM drilling_event WHERE wellbore_id=%s AND review_state='approved' ORDER BY start_md_m NULLS LAST,id LIMIT 101",
-                (candidate["id"],),
-            ).fetchall()
+            events = (
+                conn.execute(
+                    "SELECT * FROM drilling_event WHERE wellbore_id=%s AND review_state='approved' ORDER BY start_md_m NULLS LAST,id LIMIT 101",
+                    (candidate["id"],),
+                ).fetchall()
+                if may_approve_event({**candidate, "kind": candidate["data_kind"]})
+                else []
+            )
             mapped = []
             candidate_survey = survey(conn, candidate["id"])
             for event in events[:100]:
@@ -289,12 +296,14 @@ def analogues(
 
 def event_case(conn, event_id):
     event = conn.execute(
-        """SELECT e.*,w.name AS well_name,w.dataset_id,d.kind AS data_kind FROM drilling_event e
+        """SELECT e.*,w.name AS well_name,w.dataset_id,d.kind AS data_kind,
+        d.origin_kind,d.authorization_state,d.applicability,d.qualification_status
+        FROM drilling_event e
         JOIN wellbore b ON b.id=e.wellbore_id JOIN well w ON w.id=b.well_id JOIN dataset d ON d.id=w.dataset_id
         WHERE e.id=%s AND e.review_state='approved' """,
         (event_id,),
     ).fetchone()
-    if not event:
+    if not event or not may_approve_event({**event, "kind": event["data_kind"]}):
         raise HTTPException(404, "Approved event not found")
     event["evidence"] = conn.execute(
         """SELECT p.id AS passage_id,p.document_id,p.page_number,p.text_version,
@@ -392,9 +401,15 @@ def search(body: SearchRequest, _principal=Depends(current_principal)):
             e.wellbore_id, e.quality_issues,
             {score} AS retrieval_score
             FROM drilling_event e JOIN wellbore b ON b.id=e.wellbore_id JOIN well w ON w.id=b.well_id
+            JOIN dataset d ON d.id=w.dataset_id
             LEFT JOIN formation_interval i ON i.id=e.formation_interval_id
             {semantic_join}
             WHERE w.dataset_id=%s AND e.review_state='approved'
+            AND ((d.kind='synthetic' AND d.origin_kind='synthetic' AND d.applicability='demo_only')
+                 OR (d.kind<>'synthetic' AND d.qualification_status='qualified'
+                     AND d.origin_kind IN ('operator_record','public_primary')
+                     AND d.authorization_state IN ('public_permitted','restricted_authorized')
+                     AND d.applicability IN ('direct_offset','analog_only')))
             AND EXISTS(SELECT 1 FROM event_passage ep WHERE ep.event_id=e.id)
             AND (%s::uuid IS NULL OR b.id=%s) AND (%s::uuid IS NULL OR i.formation_id=%s)
             AND (%s::text IS NULL OR e.event_type=%s)

@@ -28,6 +28,10 @@ class WellSummary(BaseModel):
     name: str
     basin_name: str | None
     data_kind: str
+    origin_kind: str
+    authorization_state: str
+    applicability: str
+    qualification_status: str
     longitude: float
     latitude: float
     surface_distance_m: float | None = None

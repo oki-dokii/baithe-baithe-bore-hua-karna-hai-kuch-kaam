@@ -10,10 +10,12 @@ from psycopg.types.json import Jsonb
 
 from nwis.config import get_settings
 from nwis.db import connection
+from nwis.decision_ledger import append_decision, text_digest
 from nwis.ingestion.contracts import Candidate, ManualCandidateRequest, ReviewRequest
 from nwis.ingestion.extract import quote_is_supported
 from nwis.ingestion.normalize import normalization_context, normalize
 from nwis.ingestion.storage import path_for, store_blob
+from nwis.provenance import may_approve_event
 from nwis.security import Principal, current_principal, require_role
 
 router = APIRouter(prefix="/api/v1")
@@ -169,7 +171,7 @@ def documents(principal=Depends(current_principal)):
     with connection() as conn:
         return conn.execute(
             """SELECT d.id,d.filename,d.ingest_status,d.page_count,d.created_at,ds.kind,
-            ds.qualification_status,
+            ds.qualification_status,ds.origin_kind,ds.authorization_state,ds.applicability,
             (SELECT count(*) FROM document_event_draft c WHERE c.document_id=d.id AND c.state='needs_review') AS pending_count
             FROM source_document d JOIN dataset ds ON ds.id=d.dataset_id WHERE d.uploaded_by IS NOT NULL
             AND (%s OR d.uploaded_by=%s OR EXISTS(SELECT 1 FROM document_event_draft c WHERE c.document_id=d.id AND c.state='approved'))
@@ -196,9 +198,11 @@ def get_document(conn, document_id, principal):
 def detail(document_id: UUID, principal=Depends(current_principal)):
     with connection() as conn:
         document, reviewer = get_document(conn, document_id, principal)
-        qualification = conn.execute(
-            "SELECT qualification_status FROM dataset WHERE id=%s", (document["dataset_id"],)
-        ).fetchone()["qualification_status"]
+        provenance = conn.execute(
+            """SELECT kind,qualification_status,origin_kind,authorization_state,applicability
+            FROM dataset WHERE id=%s""",
+            (document["dataset_id"],),
+        ).fetchone()
         candidates = conn.execute(
             """SELECT c.*,p.page_number FROM document_event_draft c
             JOIN extracted_passage p ON p.id=c.passage_id WHERE c.document_id=%s AND (%s OR c.state='approved')
@@ -235,7 +239,8 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
         return {
             "id": document_id,
             "filename": document["filename"],
-            "qualification_status": qualification,
+            **provenance,
+            "approval_allowed": may_approve_event(provenance),
             "ingest_status": document["ingest_status"],
             "review_version": document["review_version"],
             "pages": pages,
@@ -304,12 +309,13 @@ def review(
         conn.execute("SELECT id FROM source_document WHERE id=%s FOR UPDATE", (document_id,))
         if body.decision == "approve":
             dataset = conn.execute(
-                """SELECT d.qualification_status FROM source_document s
+                """SELECT d.kind,d.qualification_status,d.origin_kind,d.authorization_state,d.applicability
+                FROM source_document s
                 JOIN dataset d ON d.id=s.dataset_id WHERE s.id=%s""",
                 (document_id,),
             ).fetchone()
-            if dataset and dataset["qualification_status"] == "staged_unreviewed":
-                raise HTTPException(409, "Benchmark staging does not permit event approval")
+            if not dataset or not may_approve_event(dataset):
+                raise HTTPException(409, "Source provenance does not permit event approval")
         draft = conn.execute(
             "SELECT * FROM document_event_draft WHERE id=%s AND document_id=%s FOR UPDATE",
             (body.candidate_id, document_id),
@@ -397,11 +403,12 @@ def review(
                 draft["id"],
             ),
         )
+        review_id = uuid4()
         conn.execute(
             """INSERT INTO review_decision(id,entity_type,entity_id,entity_version,actor_name,action,
             rationale,before_value,after_value,document_id) VALUES(%s,'document_event_draft',%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
-                uuid4(),
+                review_id,
                 draft["id"],
                 draft["version"] + 1,
                 principal.name,
@@ -411,6 +418,16 @@ def review(
                 Jsonb(fields.model_dump() | {"_onset_review": body.onset.model_dump(mode="json")}),
                 document_id,
             ),
+        )
+        append_decision(
+            conn,
+            actor=principal.name,
+            action=f"review_{body.decision}",
+            entity_type="document_event_draft",
+            entity_id=draft["id"],
+            payload={"review_decision_id": str(review_id), "document_id": str(document_id),
+                     "version": draft["version"] + 1, "event_id": str(event_id) if event_id else None,
+                     "rationale_sha256": text_digest(body.rationale)},
         )
         conn.execute(
             """UPDATE source_document SET review_version=review_version+1,ingest_status=CASE WHEN
@@ -477,10 +494,21 @@ def manual_candidate(
                 Jsonb(issues),
             ),
         )
+        review_id = uuid4()
         conn.execute(
             """INSERT INTO review_decision(id,entity_type,entity_id,entity_version,actor_name,action,
             rationale,after_value,document_id) VALUES(%s,'document_event_draft',%s,1,%s,'manual_create',%s,%s,%s)""",
-            (uuid4(), candidate_id, principal.name, body.rationale, fields, document_id),
+            (review_id, candidate_id, principal.name, body.rationale, fields, document_id),
+        )
+        append_decision(
+            conn,
+            actor=principal.name,
+            action="review_manual_create",
+            entity_type="document_event_draft",
+            entity_id=candidate_id,
+            payload={"review_decision_id": str(review_id), "document_id": str(document_id),
+                     "page_number": body.page_number,
+                     "rationale_sha256": text_digest(body.rationale)},
         )
         conn.execute(
             "UPDATE source_document SET review_version=review_version+1,ingest_status='needs_review' WHERE id=%s",

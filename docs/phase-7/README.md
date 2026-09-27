@@ -2,6 +2,8 @@
 
 Recorded 2026-09-27. This is a **plan, not an implementation or performance claim**. Preserve the current standalone decision-support boundary: NWIS cannot issue well-control instructions, infer field readiness from synthetic replay, or treat public Norwegian wells as OIL offsets. See the [implementation backlog](../phase-0/07-backlog.md) and [current demonstration gates](../phase-6/README.md).
 
+Work packages 1–2 now have an [initial provenance and decision-chain implementation](provenance-decision-ledger.md). Its remaining limitations and rollout gates are recorded there; later packages below are still planned.
+
 ## What the external scan actually establishes
 
 The [StrataSense repository](https://github.com/SatyajeetChavan30/SIH_Pototype) lists formation-pick uncertainty, an alarm budget, a hash-chained log, a what-if planner, WITS-0/WITSML adapters, a rig-site view and Volve ingestion. Its file tree contains corresponding modules, but its README's AUC, data counts and operational assertions are **author claims**, not independently reproduced results. [DrillIntel](https://github.com/sudhanshu-0109/DrillIntel) explicitly separates regional research context from operational well records; its README's taxonomy is a design reference, not evidence that its ML scores or safeguards are validated. We have not verified a count of competing teams or any claim that a feature is unique.

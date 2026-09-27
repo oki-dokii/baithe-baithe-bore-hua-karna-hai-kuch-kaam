@@ -34,8 +34,9 @@ def load_fixture(conn: Connection, path: Path) -> dict:
             return {"dataset_id": dataset_id, "wells": 0, "events": 0, "documents": 0, "repeated": True}
 
         cur.execute(
-            """INSERT INTO dataset(id, external_id, name, kind, version, qualification_status)
-               VALUES (%s,%s,%s,'synthetic',%s,'demo_fixture')""",
+            """INSERT INTO dataset(id, external_id, name, kind, version, qualification_status,
+               origin_kind,authorization_state,applicability)
+               VALUES (%s,%s,%s,'synthetic',%s,'demo_fixture','synthetic','synthetic','demo_only')""",
             (dataset_id, dataset_external, "Golden fictional demo", fixture_hash),
         )
         ref_id = stable_id("depth_reference", dataset_external)

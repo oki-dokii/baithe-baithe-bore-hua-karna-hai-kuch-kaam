@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
 from nwis.db import connection
+from nwis.decision_ledger import append_decision, text_digest
 from nwis.ingestion.api import receipt, save_receipt
 from nwis.intelligence import analogues, event_case
 from nwis.security import current_principal, principal_for_token, require_role
@@ -249,6 +250,10 @@ def advance(conn, session):
                     "mapped_end_md_m": mapping["mapped_end_md_m"],
                     "surface_distance_m": candidate["surface_distance_m"],
                     "data_kind": candidate["data_kind"],
+                    "origin_kind": candidate["origin_kind"],
+                    "authorization_state": candidate["authorization_state"],
+                    "applicability": candidate["applicability"],
+                    "qualification_status": candidate["qualification_status"],
                 }
                 conn.execute(
                     """INSERT INTO alert_evidence(alert_id,event_id,interval_mapping_id,passage_id,event_version,evidence_snapshot)
@@ -262,6 +267,24 @@ def advance(conn, session):
                         Jsonb(snapshot),
                     ),
                 )
+        if not existing:
+            evidence_ids = conn.execute(
+                """SELECT event_id,passage_id FROM alert_evidence WHERE alert_id=%s
+                ORDER BY event_id,passage_id""",
+                (alert_id,),
+            ).fetchall()
+            append_decision(
+                conn,
+                actor="nwis-replay",
+                action="alert_created",
+                entity_type="alert",
+                entity_id=alert_id,
+                payload={"session_id": str(session["id"]), "hazard": support[0][0]["event_type"],
+                         "rule_version": RULE, "source_mode": "SIMULATED",
+                         "evidence": [{"event_id": str(item["event_id"]),
+                                       "passage_id": str(item["passage_id"])}
+                                      for item in evidence_ids]},
+            )
     state = "completed" if sequence + 1 == len(DEPTHS) else session["state"]
     conn.execute(
         """UPDATE replay_session SET next_sequence=next_sequence+1,revision=revision+1,state=%s,
@@ -460,11 +483,12 @@ def alert_action(
         conn.execute(
             "UPDATE alert SET lifecycle=%s,revision=revision+1 WHERE id=%s", (target, alert_id)
         )
+        action_id = uuid4()
         conn.execute(
             """INSERT INTO alert_action(id,alert_id,actor_name,action,rationale,before_lifecycle,after_lifecycle)
             VALUES(%s,%s,%s,%s,%s,%s,%s)""",
             (
-                uuid4(),
+                action_id,
                 alert_id,
                 principal.name,
                 body.action,
@@ -472,6 +496,16 @@ def alert_action(
                 alert["lifecycle"],
                 target,
             ),
+        )
+        append_decision(
+            conn,
+            actor=principal.name,
+            action=f"alert_{body.action}",
+            entity_type="alert",
+            entity_id=alert_id,
+            payload={"alert_action_id": str(action_id), "before": alert["lifecycle"],
+                     "after": target, "revision": alert["revision"] + 1,
+                     "rationale_sha256": text_digest(body.rationale)},
         )
         return save_receipt(
             conn,
@@ -509,6 +543,16 @@ def feedback(
                 body.observed_outcome,
                 body.rationale,
             ),
+        )
+        append_decision(
+            conn,
+            actor=principal.name,
+            action="alert_feedback",
+            entity_type="alert",
+            entity_id=alert_id,
+            payload={"feedback_id": str(feedback_id), "observed_outcome": body.observed_outcome,
+                     "action_taken_sha256": text_digest(body.action_taken),
+                     "rationale_sha256": text_digest(body.rationale)},
         )
         return save_receipt(
             conn,

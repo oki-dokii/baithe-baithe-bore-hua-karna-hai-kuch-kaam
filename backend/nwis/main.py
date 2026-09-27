@@ -147,6 +147,7 @@ def wells(
     with connection() as conn:
         rows = conn.execute(
             """SELECT w.id, w.external_id, w.name, w.basin_name, d.kind AS data_kind,
+                      d.origin_kind,d.authorization_state,d.applicability,d.qualification_status,
                       ST_X(w.surface_point::geometry) AS longitude,
                       ST_Y(w.surface_point::geometry) AS latitude
                FROM well w JOIN dataset d ON d.id=w.dataset_id
@@ -180,6 +181,7 @@ def nearby_wells(
             raise HTTPException(status_code=404, detail="Active well not found")
         rows = conn.execute(
             """SELECT w.id, w.external_id, w.name, w.basin_name, d.kind AS data_kind,
+                      d.origin_kind,d.authorization_state,d.applicability,d.qualification_status,
                       ST_X(w.surface_point::geometry) AS longitude,
                       ST_Y(w.surface_point::geometry) AS latitude,
                       ST_Distance(w.surface_point, a.surface_point) AS surface_distance_m
