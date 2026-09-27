@@ -63,7 +63,10 @@ def main() -> None:
             "SELECT review_state FROM drilling_event WHERE id=%s", (stable_id("event", "SYN-E-B-001"),)
         ).fetchone()
         assert row["review_state"] == "draft"
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()["version_num"] == "0004_operations"
+        relation = conn.execute(
+            "SELECT to_regclass('event_embedding') AS relation"
+        ).fetchone()["relation"]
+        assert relation == "event_embedding"
         try:
             with conn.transaction():
                 conn.execute(
