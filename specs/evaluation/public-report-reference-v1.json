@@ -1,0 +1,71 @@
+{
+  "schema_version": "public-report-reference-v1",
+  "status": "analyst_page_verified_not_domain_approved",
+  "purpose": "Extraction and retrieval reference; never operational alert evidence or ML labels",
+  "reviewed_on": "2026-09-27",
+  "sources": [
+    {
+      "id": "NOD-511",
+      "wellbore": "25/10-2 R",
+      "factpage_url": "https://factpages.sodir.no/en/wellbore/PageView/With/Wdss/511",
+      "pdf_url": "https://factpages.sodir.no/pbl/wellbore_documents/511_25_10_2_R_COMPLETION_REPORT_AND_LOG.pdf",
+      "local_filename": "511_25_10_2_R_COMPLETION_REPORT_AND_LOG.pdf",
+      "sha256": "960aaeed8d8a439f098537ca1c01b2d9e99da19f748fa3f57fbd284424e37de5",
+      "byte_size": 11155104,
+      "pdf_pages": 58,
+      "text_mode": "scanned_ocr",
+      "rights_note": "Report-specific redistribution not established; raw PDF and OCR stay local"
+    },
+    {
+      "id": "NOD-399",
+      "wellbore": "31/2-6",
+      "factpage_url": "https://factpages.sodir.no/en/wellbore/PageView/Exploration/By/ByCompletionDate/399",
+      "pdf_url": "https://factpages.sodir.no/pbl/wellbore_documents/399_01_31_2_6_Well_summary_by_Anchor.pdf",
+      "local_filename": "399_01_31_2_6_Well_summary_by_Anchor.pdf",
+      "sha256": "eb680aa8493da72cf4413bb402ae5d777d2e8416f1481a3aad29d9be3465190b",
+      "byte_size": 1582594,
+      "pdf_pages": 38,
+      "text_mode": "text_layer_checked_against_page",
+      "rights_note": "Report-specific redistribution not established; raw PDF and extracted text stay local"
+    },
+    {
+      "id": "NOD-6599",
+      "wellbore": "35/7-1 S and T2 narrative",
+      "factpage_url": "https://factpages.sodir.no/en/wellbore/PageView/Exploration/Wdss/6599",
+      "pdf_url": "https://factpages.sodir.no/pbl/wellbore_documents/6599_35_7_1_S_COMPLETION_DRILLING_REPORT.pdf",
+      "local_filename": "6599_35_7_1_S_COMPLETION_DRILLING_REPORT.pdf",
+      "sha256": "eb3f92bb6c8df803a47510909d32f72a3413378cc97b0bac88a8d0695b9e9de6",
+      "byte_size": 3243302,
+      "pdf_pages": 166,
+      "text_mode": "text_layer_checked_against_page",
+      "rights_note": "Report-specific redistribution not established; raw PDF and extracted text stay local"
+    }
+  ],
+  "items": [
+    {"id":"R001","source_id":"NOD-511","pdf_page":7,"section":"E. Drilling Problems","focus":"Original drilling to 7187 ft described as normal","kind":"hard_negative","event_type":null,"depth":null,"caveat":"No incident should be inferred for the original phase from this statement"},
+    {"id":"R002","source_id":"NOD-511","pdf_page":7,"section":"E. Drilling Problems","focus":"Re-entry lost circulation at source-reported 7733 ft","kind":"observed_event","event_type":"mud_loss","depth":{"value":7733,"unit":"ft","meaning":"reported_drilling_depth","axis":null,"datum":null},"caveat":"FactPage says 2369 m; later sample sheets show continuing losses through 7773 ft. Onset and normalized MD remain disputed and alert eligibility blocked"},
+    {"id":"R003","source_id":"NOD-511","pdf_page":7,"section":"E. Drilling Problems","focus":"Pipe became stuck; 7262 ft locates bottom of fish, not onset","kind":"observed_event","event_type":"stuck_pipe","depth":{"value":7262,"unit":"ft","meaning":"fish_bottom_not_stuck_onset","axis":null,"datum":null},"caveat":"Do not assign 7262 ft as stuck-pipe onset"},
+    {"id":"R004","source_id":"NOD-511","pdf_page":7,"section":"E. Drilling Problems","focus":"Sidetrack was required after the stuck-pipe episode","kind":"action_or_outcome","event_type":"stuck_pipe","depth":null,"caveat":"Historical response only; not an operational recommendation"},
+    {"id":"R005","source_id":"NOD-511","pdf_page":7,"section":"E. Drilling Problems","focus":"Six cones lost while drilling sidetrack at 8192 ft","kind":"observed_event","event_type":"other","depth":{"value":8192,"unit":"ft","meaning":"drilling_depth","axis":null,"datum":null},"caveat":"Equipment loss is not another stuck-pipe event"},
+    {"id":"R006","source_id":"NOD-511","pdf_page":7,"section":"F. Coring","focus":"Core interval 7789-7801 ft is a coring record","kind":"hard_negative","event_type":null,"depth":{"value":7789,"unit":"ft","meaning":"core_interval_top","axis":null,"datum":null},"caveat":"Do not infer loss or stuck pipe from nearby depth values"},
+    {"id":"R007","source_id":"NOD-511","pdf_page":10,"section":"V.A Table of Stratigraphy","focus":"Re-entry stratigraphy labels drill depths as KB 31 ft","kind":"context","event_type":null,"depth":null,"caveat":"Report-level clue does not explicitly assign the incident page an MD/KB datum"},
+    {"id":"R008","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Leak-off test at 825 m equivalent mud weight 1.49 SG","kind":"hard_negative","event_type":null,"depth":{"value":825,"unit":"m","meaning":"test_depth","axis":null,"datum":null},"caveat":"A leak-off test is not an uncontrolled mud-loss event"},
+    {"id":"R009","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Lost circulation at 1305 m","kind":"observed_event","event_type":"mud_loss","depth":{"value":1305,"unit":"m","meaning":"reported_drilling_depth","axis":null,"datum":null},"caveat":"Axis/datum not stated in this passage"},
+    {"id":"R010","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Circulation regained after pump rates were reduced","kind":"action_or_outcome","event_type":"mud_loss","depth":null,"caveat":"Linked to R009; not a separate loss event"},
+    {"id":"R011","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Partial returns at 1485 m","kind":"observed_event","event_type":"mud_loss","depth":{"value":1485,"unit":"m","meaning":"reported_drilling_depth","axis":null,"datum":null},"caveat":"May be a continuation or second loss episode; grouping requires review"},
+    {"id":"R012","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Mica and reduced pump strokes still left partial returns","kind":"action_or_outcome","event_type":"mud_loss","depth":null,"caveat":"Linked to R011; partial outcome, not a new onset"},
+    {"id":"R013","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Tight hole at 1400 m on running back in","kind":"hard_negative","event_type":null,"depth":{"value":1400,"unit":"m","meaning":"tight_hole_location","axis":null,"datum":null},"caveat":"Observed tight hole must not be labeled stuck pipe"},
+    {"id":"R014","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"LCM mud circulation before cementing at 1475 m shoe","kind":"hard_negative","event_type":null,"depth":{"value":1475,"unit":"m","meaning":"casing_shoe_depth","axis":null,"datum":null},"caveat":"Preparation is not another cementing failure or loss onset"},
+    {"id":"R015","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Lost circulation at 1855 m MD RKB in 17.5 in section","kind":"observed_event","event_type":"mud_loss","depth":{"value":1855,"unit":"m","meaning":"loss_onset","axis":"MD","datum":"RKB"},"caveat":"Event belongs to original S section, before T2 sidetrack"},
+    {"id":"R016","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Riser mud level dropped approximately 40 m","kind":"context","event_type":"mud_loss","depth":null,"caveat":"40 m is a level drop, not an event depth or volume"},
+    {"id":"R017","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"LCM, cement and reduced mud weight attempts did not regain circulation","kind":"action_or_outcome","event_type":"mud_loss","depth":null,"caveat":"Do not label any one attempt successful; linked to R015"},
+    {"id":"R018","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Later T2 section drilled with lower starting mud weight without losses","kind":"hard_negative","event_type":null,"depth":null,"caveat":"A no-loss outcome on T2 is not a T2 loss event"},
+    {"id":"R019","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Connection gas at 3876 m with negative flow check","kind":"hard_negative","event_type":null,"depth":{"value":3876,"unit":"m","meaning":"negative_flow_check_depth","axis":"MD","datum":null},"caveat":"Do not label the 3876 m check as a positive influx"},
+    {"id":"R020","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Positive 400 L flow at 3893 m before shut-in","kind":"observed_event","event_type":"kick","depth":{"value":3893,"unit":"m","meaning":"positive_flow_depth","axis":"MD","datum":null},"caveat":"Well-control incident; do not claim validated pressure prediction"},
+    {"id":"R021","source_id":"NOD-6599","pdf_page":14,"section":"5.3 Well incidents","focus":"Returns lost during 20 SPM kill after about 400 strokes","kind":"observed_event","event_type":"mud_loss","depth":null,"caveat":"No independent onset depth stated for this later return-loss episode"},
+    {"id":"R022","source_id":"NOD-399","pdf_page":23,"section":"Summary of Events - 17.5 in hole","focus":"Slight mud losses while reaming the final seven joints to bottom","kind":"observed_event","event_type":"mud_loss","depth":null,"caveat":"No onset depth given; do not borrow 1400 m or 1485 m from adjacent statements"},
+    {"id":"R023","source_id":"NOD-511","pdf_page":19,"section":"Wellsite Sample Description, 14 May 1972","focus":"65 bbl loss recorded at 7745 ft with pressure-surge question","kind":"context","event_type":"mud_loss","depth":{"value":7745,"unit":"ft","meaning":"loss_tally_depth_not_proven_onset","axis":null,"datum":null},"caveat":"Continuation of a loss episode, not automatically a second onset"},
+    {"id":"R024","source_id":"NOD-511","pdf_page":20,"section":"Wellsite Sample Description, 15 May 1972","focus":"Still losing circulation in 7760-7770 ft sample interval","kind":"context","event_type":"mud_loss","depth":{"value":7760,"unit":"ft","meaning":"sample_interval_top_not_onset","axis":null,"datum":null},"caveat":"Shows losses persisted beyond page 7's 7733 ft statement"},
+    {"id":"R025","source_id":"NOD-511","pdf_page":20,"section":"Wellsite Sample Description, 15 May 1972","focus":"Drilled to 7773 ft and lost 400 bbl over eight hours","kind":"context","event_type":"mud_loss","depth":{"value":7773,"unit":"ft","meaning":"later_drilled_depth_not_onset","axis":null,"datum":null},"caveat":"7773 ft converts to 2369.21 m, close to the rounded FactPage summary; keep conflict flag until domain review"}
+  ]
+}

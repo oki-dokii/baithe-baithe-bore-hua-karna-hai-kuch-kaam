@@ -10,7 +10,7 @@ Recorded 2026-09-27. This is a software rehearsal and gap register, not a claim 
 | Scanned public-report trial | [NOD 25/10-2 R](../phase-2/real-source-qualification.md) 58-page OCR staged two cited drafts. Depth mismatch, attribution/rights and human approval remain open. | Partial; not approved operational evidence |
 | Public ML source | [FORGE audit](../phase-5/dataset-candidates.md) found telemetry/report candidates, no qualified 100 m mud-loss labels or current feature-schema coverage. | Open |
 | Fresh-install rehearsal | Earlier Phase 1 validation is recorded [separately](../phase-1/README.md). CI now runs a synthetic end-to-end rehearsal on its newly built Compose stack and rejects a nonempty database. A local empty-volume UI rehearsal and captured evidence are still pending. | Automated gate added; local visual gate open |
-| Retrieval evaluation | A read-only fixed-question evaluator now scores approved passage recall@5 and abstentions. A 15-question **synthetic** API regression passes; the reviewed real-source set and its result do not exist yet. Current retrieval is filtered full-text, not embeddings. | Tooling and synthetic check pass; real-source gate open |
+| Retrieval evaluation | A read-only evaluator scores approved passage recall@5 and abstentions; a 15-question **synthetic** API regression passes. A [provisional 18-question/25-item public reference set](public-report-benchmark.md) now exists, but it has no approved database passage UUID mapping or public API score. Current retrieval is filtered full-text, not embeddings. | Reference assembled; independent review and real-source scoring open |
 | Alert field evaluation | No real labeled replay case count, lead-time distribution or false-alert denominator. Synthetic one-episode behavior is tested only. | Open |
 | eRTMAC and field connectivity | No OIL interface contract, credentials or live stream. Fixed replay works; persistent disconnected field operation is not verified. | Open |
 | Pitch and SIH metadata | No evidence-backed field ROI or official SIH problem ID confirmed. | Open |
@@ -19,7 +19,7 @@ Recorded 2026-09-27. This is a software rehearsal and gap register, not a claim 
 
 Use [local setup](../phase-1/README.md) and [golden demo script](../phase-0/05-demo-and-evaluation.md). Enter the viewer/engineer/reviewer credentials from the local ignored `.env`, then load the synthetic fixture. Show the map, compare `SYN-A` with `SYN-B`, review the draft, start a new replay and step through 2029/2030/2031/2141 m. Demonstrate the cited historical alert and explicitly show `risk_score: null` with `model_not_available`. Treat the scenario as **SIMULATED** on every screen and in narration.
 
-The next honest demo gate is a fresh-install run plus recorded screenshots/API results, a fixed retrieval question set, and a reviewed public-report case. ML accuracy and OIL integration require external data/access; do not substitute synthetic checks for either.
+The [local visual rehearsal](visual-rehearsal-2026-09-27.md) passed the intelligence and operations browser flows on an existing development database, but its WebSocket-specific browser check failed and a clean isolated visual install remains open. The [public report reference](public-report-benchmark.md) is page-verified but not domain-approved or API-scored. ML accuracy and OIL integration require external data/access; do not substitute synthetic checks for either.
 
 ## Automated clean-database rehearsal
 
