@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import ReportFacts from "./ReportFacts";
 
 type Fields = {
   event_type: string;
@@ -43,6 +44,7 @@ type Doc = {
   applicability: string;
 };
 type Detail = Doc & {
+  dataset_id: string;
   approval_allowed: boolean;
   review_version: number;
   candidates: Candidate[];
@@ -987,6 +989,9 @@ export default function Documents({ token }: { token: string }) {
             </form>
           </details>
         )}
+      {detail && <ReportFacts key={detail.id} token={token} documentId={detail.id}
+        datasetId={detail.dataset_id} page={page} canReview={canReview}
+        approvalAllowed={Boolean(detail.approval_allowed)} />}
     </section>
   );
 }

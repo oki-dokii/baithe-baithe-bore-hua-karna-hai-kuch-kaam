@@ -21,12 +21,25 @@ class ReviewFact(BaseModel):
     fact_key: str = Field(min_length=3, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
     answer: str = Field(min_length=1, max_length=1000)
     quote: str = Field(min_length=1, max_length=4000)
+    rationale: str = Field(min_length=3, max_length=2000)
+    ocr_image_verified: bool = False
 
 
 class AskFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dataset_id: UUID
     fact_key: str = Field(min_length=3, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
+
+
+class ReviewQuestion(AskFact):
+    question: str = Field(min_length=5, max_length=500)
+    state: str = Field(pattern="^(ready|conflict_blocked)$")
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class AskQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: UUID
 
 
 @router.post("", status_code=201)
@@ -46,13 +59,18 @@ def approve_fact(body: ReviewFact, principal=Depends(require_role("reviewer"))):
             raise HTTPException(409, "Dataset is not qualified for approved evidence")
         if not body.answer.strip() or not body.quote.strip():
             raise HTTPException(422, "Answer and quote cannot be blank")
+        if len(body.rationale.strip()) < 3:
+            raise HTTPException(422, "A review rationale is required")
         if not quote_is_supported(body.quote, row["raw_text"]):
             raise HTTPException(422, "Quote must occur in the cited passage")
+        if row["ocr_applied"] and not body.ocr_image_verified:
+            raise HTTPException(422, "OCR facts require explicit page-image verification")
         fact_id = uuid4()
         conn.execute(
             """INSERT INTO reviewed_report_fact
-                (id,dataset_id,passage_id,fact_key,answer,quote,reviewer_name)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (id,dataset_id,passage_id,fact_key,answer,quote,reviewer_name,
+                 review_rationale,ocr_image_verified)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 fact_id,
                 body.dataset_id,
@@ -61,6 +79,8 @@ def approve_fact(body: ReviewFact, principal=Depends(require_role("reviewer"))):
                 body.answer.strip(),
                 body.quote.strip(),
                 principal.name,
+                body.rationale.strip(),
+                body.ocr_image_verified,
             ),
         )
         append_decision(
@@ -76,6 +96,8 @@ def approve_fact(body: ReviewFact, principal=Depends(require_role("reviewer"))):
                 "fact_key": body.fact_key,
                 "answer_sha256": text_digest(body.answer.strip()),
                 "quote_sha256": text_digest(body.quote.strip()),
+                "rationale_sha256": text_digest(body.rationale.strip()),
+                "ocr_image_verified": body.ocr_image_verified,
             },
         )
         return {
@@ -109,6 +131,119 @@ def withdraw_fact(fact_id: UUID, principal=Depends(require_role("reviewer"))):
         return {"id": fact_id, "state": "withdrawn"}
 
 
+@router.get("/documents/{document_id}")
+def document_facts(document_id: UUID, principal=Depends(current_principal)):
+    with connection() as conn:
+        document = conn.execute(
+            """SELECT sd.dataset_id,sd.uploaded_by,d.* FROM source_document sd
+                JOIN dataset d ON d.id=sd.dataset_id WHERE sd.id=%s""",
+            (document_id,),
+        ).fetchone()
+        if not document:
+            raise HTTPException(404, "Document not found")
+        reviewer = principal.role in ("reviewer", "admin")
+        if not reviewer and not may_approve_event(document):
+            return []
+        return conn.execute(
+            """SELECT f.id,f.fact_key,f.answer,f.quote,f.state,f.reviewer_name,f.reviewed_at,
+                f.review_rationale,f.ocr_image_verified,p.page_number,p.id AS passage_id FROM reviewed_report_fact f
+                JOIN extracted_passage p ON p.id=f.passage_id WHERE p.document_id=%s
+                AND (%s OR f.state='approved')
+                ORDER BY f.reviewed_at DESC,f.id LIMIT 200""",
+            (document_id, reviewer),
+        ).fetchall()
+
+
+@router.post("/questions", status_code=201)
+def add_question(body: ReviewQuestion, principal=Depends(require_role("reviewer"))):
+    if body.state == "conflict_blocked" and not (body.reason or "").strip():
+        raise HTTPException(422, "A blocked question needs a reason")
+    with connection() as conn:
+        dataset = conn.execute("SELECT * FROM dataset WHERE id=%s", (body.dataset_id,)).fetchone()
+        if not dataset:
+            raise HTTPException(404, "Dataset not found")
+        if body.state == "ready" and not may_approve_event(dataset):
+            raise HTTPException(409, "Dataset is not qualified for ready questions")
+        if (
+            body.state == "ready"
+            and not conn.execute(
+                """SELECT 1 FROM reviewed_report_fact WHERE dataset_id=%s AND fact_key=%s
+                AND state='approved' LIMIT 1""",
+                (body.dataset_id, body.fact_key),
+            ).fetchone()
+        ):
+            raise HTTPException(409, "Ready questions require an approved report fact")
+        question_id = uuid4()
+        conn.execute(
+            """INSERT INTO report_fact_question
+                (id,dataset_id,fact_key,question,state,reason,reviewer_name)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                question_id,
+                body.dataset_id,
+                body.fact_key,
+                body.question.strip(),
+                body.state,
+                body.reason.strip() if body.reason else None,
+                principal.name,
+            ),
+        )
+        append_decision(
+            conn,
+            actor=principal.name,
+            action="register_report_question",
+            entity_type="report_fact_question",
+            entity_id=question_id,
+            payload={
+                "dataset_id": str(body.dataset_id),
+                "fact_key": body.fact_key,
+                "state": body.state,
+                "question_sha256": text_digest(body.question.strip()),
+                "reason_sha256": text_digest(body.reason.strip()) if body.reason else None,
+            },
+        )
+        return {"id": question_id, "state": body.state}
+
+
+@router.get("/questions")
+def questions(dataset_id: UUID | None = None, _principal=Depends(current_principal)):
+    with connection() as conn:
+        if (
+            dataset_id
+            and not conn.execute("SELECT 1 FROM dataset WHERE id=%s", (dataset_id,)).fetchone()
+        ):
+            raise HTTPException(404, "Dataset not found")
+        return conn.execute(
+            """SELECT q.id,q.dataset_id,q.question,q.state,q.reason,q.created_at,
+                d.kind,d.qualification_status,d.applicability
+                FROM report_fact_question q JOIN dataset d ON d.id=q.dataset_id
+                WHERE (%s::uuid IS NULL OR q.dataset_id=%s)
+                ORDER BY q.created_at,q.id LIMIT 100""",
+            (dataset_id, dataset_id),
+        ).fetchall()
+
+
+@router.post("/ask-question")
+def ask_question(body: AskQuestion, principal=Depends(current_principal)):
+    with connection() as conn:
+        item = conn.execute(
+            "SELECT id,dataset_id,fact_key,question,state,reason FROM report_fact_question WHERE id=%s",
+            (body.question_id,),
+        ).fetchone()
+    if not item:
+        raise HTTPException(404, "Question not found")
+    if item["state"] == "conflict_blocked":
+        return {
+            "question": item["question"],
+            "status": "conflict",
+            "answer": None,
+            "citations": [],
+            "reason": item["reason"],
+        }
+    answer = ask_fact(AskFact(dataset_id=item["dataset_id"], fact_key=item["fact_key"]), principal)
+    return {"question": item["question"], **answer}
+
+
 @router.post("/ask")
 def ask_fact(body: AskFact, _principal=Depends(current_principal)):
     with connection() as conn:
@@ -124,7 +259,7 @@ def ask_fact(body: AskFact, _principal=Depends(current_principal)):
             }
         rows = conn.execute(
             """SELECT f.id,f.answer,f.quote,f.reviewer_name,f.reviewed_at,
-                p.id AS passage_id,p.page_number,p.text_version,p.ocr_applied,
+                f.ocr_image_verified,p.id AS passage_id,p.page_number,p.text_version,p.ocr_applied,
                 sd.id AS document_id,sd.filename,sd.version AS document_version
                 FROM reviewed_report_fact f JOIN extracted_passage p ON p.id=f.passage_id
                 JOIN source_document sd ON sd.id=p.document_id

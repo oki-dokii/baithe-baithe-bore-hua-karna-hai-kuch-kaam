@@ -5,6 +5,7 @@ import "./styles.css";
 import "./editorial-extras.css";
 import "./intelligence.css";
 import "./operations.css";
+import "./report-facts.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
