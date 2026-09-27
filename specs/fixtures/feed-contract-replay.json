@@ -1,0 +1,32 @@
+{
+  "schema_version": "feed-contract-replay-v1",
+  "source_kind": "synthetic",
+  "as_of": "2026-09-27T10:00:15Z",
+  "changes": [
+    {
+      "stream_id": "SYN-FEED-1", "wellbore_id": "SYN-A", "channel": "flow_in", "source_record_id": "r1",
+      "cursor": 1, "revision": 1, "operation": "upsert", "observed_at": "2026-09-27T10:00:00Z",
+      "received_at": "2026-09-27T10:00:01Z", "md_m": 2030, "value": 800, "unit": "L/min", "quality": "good"
+    },
+    {
+      "stream_id": "SYN-FEED-1", "wellbore_id": "SYN-A", "channel": "flow_in", "source_record_id": "r2",
+      "cursor": 2, "revision": 1, "operation": "upsert", "observed_at": "2026-09-27T10:00:08Z",
+      "received_at": "2026-09-27T10:00:09Z", "md_m": 2031, "value": 810, "unit": "L/min", "quality": "good"
+    },
+    {
+      "stream_id": "SYN-FEED-1", "wellbore_id": "SYN-A", "channel": "flow_in", "source_record_id": "r1",
+      "cursor": 3, "revision": 2, "operation": "upsert", "observed_at": "2026-09-27T10:00:00Z",
+      "received_at": "2026-09-27T10:00:11Z", "md_m": 2030, "value": 805, "unit": "L/min", "quality": "good"
+    },
+    {
+      "stream_id": "SYN-FEED-1", "wellbore_id": "SYN-A", "channel": "flow_in", "source_record_id": "r1",
+      "cursor": 3, "revision": 2, "operation": "upsert", "observed_at": "2026-09-27T10:00:00Z",
+      "received_at": "2026-09-27T10:00:11Z", "md_m": 2030, "value": 805, "unit": "L/min", "quality": "good"
+    },
+    {
+      "stream_id": "SYN-FEED-1", "wellbore_id": "SYN-A", "channel": "flow_in", "source_record_id": "r3",
+      "cursor": 4, "revision": 1, "operation": "upsert", "observed_at": "2026-09-27T09:59:59Z",
+      "received_at": "2026-09-27T10:00:12Z", "md_m": 2029, "value": 790, "unit": "L/min", "quality": "good"
+    }
+  ]
+}
