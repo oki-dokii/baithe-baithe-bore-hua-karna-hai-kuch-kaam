@@ -3,6 +3,7 @@ import Documents from "./Documents";
 const Intelligence = lazy(() => import("./Intelligence"));
 import Operations from "./Operations";
 import Prediction from "./Prediction";
+import ReportQuestions from "./ReportQuestions";
 
 type Component = { state: string; detail: string | null };
 type Status = {
@@ -59,7 +60,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<
-    "documents" | "intelligence" | "foundation" | "operations" | "prediction"
+    "documents" | "intelligence" | "foundation" | "operations" | "prediction" | "questions"
   >("operations");
 
   useEffect(() => {
@@ -215,20 +216,28 @@ export default function App() {
                 02 <span>Well intelligence</span>
               </button>
               <button
+                className={view === "questions" ? "active" : ""}
+                onClick={() => setView("questions")}
+              >
+                03 <span>Report questions</span>
+              </button>
+              <button
                 className={view === "foundation" ? "active" : ""}
                 onClick={() => setView("foundation")}
               >
-                03 <span>Well directory</span>
+                04 <span>Well directory</span>
               </button>
               <button
                 className={view === "prediction" ? "active" : ""}
                 onClick={() => setView("prediction")}
               >
-                04 <span>Model readiness</span>
+                05 <span>Model readiness</span>
               </button>
             </nav>
             {view === "documents" ? (
               <Documents token={entered} />
+            ) : view === "questions" ? (
+              <ReportQuestions token={entered} />
             ) : view === "intelligence" ? (
               <Suspense
                 fallback={<p role="status">Loading the offset atlas…</p>}

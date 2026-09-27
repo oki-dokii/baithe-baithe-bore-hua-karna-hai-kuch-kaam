@@ -174,7 +174,9 @@ def documents(principal=Depends(current_principal)):
             ds.qualification_status,ds.origin_kind,ds.authorization_state,ds.applicability,
             (SELECT count(*) FROM document_event_draft c WHERE c.document_id=d.id AND c.state='needs_review') AS pending_count
             FROM source_document d JOIN dataset ds ON ds.id=d.dataset_id WHERE d.uploaded_by IS NOT NULL
-            AND (%s OR d.uploaded_by=%s OR EXISTS(SELECT 1 FROM document_event_draft c WHERE c.document_id=d.id AND c.state='approved'))
+            AND (%s OR d.uploaded_by=%s OR EXISTS(SELECT 1 FROM document_event_draft c WHERE c.document_id=d.id AND c.state='approved')
+                OR EXISTS(SELECT 1 FROM reviewed_report_fact f JOIN extracted_passage p ON p.id=f.passage_id
+                    WHERE p.document_id=d.id AND f.state='approved'))
             ORDER BY d.created_at DESC LIMIT 100""",
             (reviewer, principal.name),
         ).fetchall()
@@ -186,8 +188,11 @@ def get_document(conn, document_id, principal):
         raise HTTPException(404, "Document not found")
     reviewer = principal.role in ("reviewer", "admin")
     approved = conn.execute(
-        "SELECT 1 FROM document_event_draft WHERE document_id=%s AND state='approved' LIMIT 1",
-        (document_id,),
+        """SELECT 1 WHERE EXISTS(SELECT 1 FROM document_event_draft
+            WHERE document_id=%s AND state='approved')
+            OR EXISTS(SELECT 1 FROM reviewed_report_fact f JOIN extracted_passage p ON p.id=f.passage_id
+                WHERE p.document_id=%s AND f.state='approved')""",
+        (document_id, document_id),
     ).fetchone()
     if not reviewer and document["uploaded_by"] != principal.name and not approved:
         raise HTTPException(404, "Document not found")
@@ -238,6 +243,7 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
         )
         return {
             "id": document_id,
+            "dataset_id": document["dataset_id"],
             "filename": document["filename"],
             **provenance,
             "approval_allowed": may_approve_event(provenance),
