@@ -2,6 +2,8 @@
 
 Phases 0 and 1 are complete. Phase 2 ingestion/review is implemented; [three pinned public reports are now staged in a separate database](../phase-6/public-benchmark-ingestion-2026-09-27.md), but claim-level/domain review, rights and live-provider validation remain open ([record](../phase-2/README.md)). Phase 3 has opt-in local semantic retrieval for approved claims, but independent real-report relevance/abstention evaluation remains open ([record](../phase-3/semantic-search.md)). Phase 4 core fixed replay/alerts has WebSocket snapshots with HTTP fallback and silent-socket timeout; persistent offline recovery and a cursor-based event backlog remain open ([record](../phase-4/README.md)). Phase 5 has qualification tooling, model-readiness UI, [local Volve/feed experiments](../phase-5/qualification-experiments.md) and [source-timed label checks](../phase-5/temporal-label-qualification.md); training and predictive evaluation remain blocked on suitable data ([record](../phase-5/README.md)). Phase 6 has a [clean isolated synthetic browser rehearsal](../phase-6/semantic-preview-rehearsal-2026-09-27.md), with full Compose rebuild and field evaluation gates open. Build one qualified hazard path before expanding scenarios.
 
+The [research-backed Phase 7 extension plan](../phase-7/README.md) prioritizes provenance, audit integrity, cited report-fact QA, reconnect behavior, an OIL-approved interface and qualified ML. It distinguishes repo claims and stretch ideas from verified NWIS behavior.
+
 | Phase | Deliverables in dependency order | Exit check |
 |---|---|---|
 | 0 — Specification | Scope; architecture decisions; logical schema; API/UI contracts; synthetic fixture; data register | These documents and fixture are internally checked and committed |

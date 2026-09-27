@@ -6,6 +6,8 @@ NWIS is a proposed decision-support platform for Oil India Limited's SIH problem
 
 Repository: https://github.com/oki-dokii/baithe-baithe-bore-hua-karna-hai-kuch-kaam
 
+The [research-backed Phase 7 extension plan](docs/phase-7/README.md) records candidate additions, implementation order and the evidence each would need before we claim it works.
+
 ## Specification
 
 Read these in order:
