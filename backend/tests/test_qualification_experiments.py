@@ -19,6 +19,7 @@ def test_volve_example_reports_overlap_without_claiming_training_readiness():
     report = audit(inventory)
     assert report["wellbores_in_inventory"] == 2
     assert report["wellbores_with_ddr_and_telemetry"] == 1
+    assert report["wellbores_with_calendar_overlap"] == 1
     assert report["reviewed_time_depth_joins"] == 0
     assert "time_depth_joins_not_reviewed" in report["blockers"]
     assert not report["training_authorized"]
@@ -34,6 +35,9 @@ def test_volve_inventory_requires_unique_bores_and_real_join_inputs():
     unsupported["wellbores"][1]["time_depth_join_reviewed"] = True
     with pytest.raises(ValidationError):
         Inventory.model_validate(unsupported)
+    no_calendar_overlap = copy.deepcopy(example)
+    no_calendar_overlap["wellbores"][0]["telemetry_periods"][0]["start"] = "2026-01-03T00:00:00Z"
+    assert audit(Inventory.model_validate(no_calendar_overlap))["wellbores_with_calendar_overlap"] == 0
 
 
 def replay():

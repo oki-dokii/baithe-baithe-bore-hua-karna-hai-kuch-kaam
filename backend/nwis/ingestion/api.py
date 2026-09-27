@@ -329,7 +329,9 @@ def review(
             conn.execute(
                 """INSERT INTO drilling_event(id,wellbore_id,formation_interval_id,event_type,start_md_m,
                 end_md_m,severity,description,review_state,extraction_run_id,source_depth_axis,source_depth_unit,
-                source_datum,source_fields,quality_issues) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'approved',%s,%s,%s,%s,%s,%s)""",
+                source_datum,source_fields,quality_issues,onset_time_earliest,onset_time_latest,
+                onset_time_basis) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'approved',%s,%s,%s,%s,%s,%s,
+                %s,%s,%s)""",
                 (
                     event_id,
                     wellbore,
@@ -345,6 +347,9 @@ def review(
                     fields.depth_datum,
                     Jsonb(fields.model_dump()),
                     Jsonb(issues),
+                    body.onset.earliest,
+                    body.onset.latest,
+                    body.onset.basis,
                 ),
             )
             conn.execute(
@@ -389,7 +394,7 @@ def review(
                 body.decision,
                 body.rationale,
                 Jsonb(draft["current_fields"]),
-                Jsonb(fields.model_dump()),
+                Jsonb(fields.model_dump() | {"_onset_review": body.onset.model_dump(mode="json")}),
                 document_id,
             ),
         )

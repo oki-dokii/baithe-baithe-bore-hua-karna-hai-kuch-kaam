@@ -1,3 +1,4 @@
+from datetime import datetime, time
 from typing import Literal
 from uuid import UUID
 
@@ -40,6 +41,37 @@ class CandidateBatch(BaseModel):
     events: list[Candidate] = Field(max_length=100)
 
 
+class OnsetReview(BaseModel):
+    """Reviewer-supplied source-time bounds, never inferred from upload time."""
+
+    model_config = ConfigDict(extra="forbid")
+    basis: Literal["exact_timelog", "day_only_ddr", "shift_report", "unspecified"]
+    earliest: datetime | None = None
+    latest: datetime | None = None
+
+    @model_validator(mode="after")
+    def valid_bounds(self):
+        if self.basis == "unspecified":
+            if self.earliest is not None or self.latest is not None:
+                raise ValueError("Unspecified onset cannot have time bounds")
+            return self
+        if self.earliest is None or self.latest is None:
+            raise ValueError("Timed onset requires both bounds")
+        if self.earliest.tzinfo is None or self.latest.tzinfo is None:
+            raise ValueError("Onset bounds must include a timezone")
+        if self.earliest > self.latest:
+            raise ValueError("Earliest onset must not follow latest")
+        if self.basis == "exact_timelog" and self.earliest != self.latest:
+            raise ValueError("Exact timelog onset must have equal bounds")
+        if self.basis == "day_only_ddr" and not (
+            self.earliest.date() == self.latest.date()
+            and self.earliest.time() == time.min
+            and self.latest.time() == time.max
+        ):
+            raise ValueError("Day-only DDR bounds must cover the full local reporting day")
+        return self
+
+
 class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     candidate_id: UUID
@@ -48,6 +80,7 @@ class ReviewRequest(BaseModel):
     rationale: str = Field(min_length=3, max_length=2000)
     fields: Candidate | None = None
     acknowledge_issues: bool = False
+    onset: OnsetReview = Field(default_factory=lambda: OnsetReview(basis="unspecified"))
 
     @model_validator(mode="after")
     def correction_requires_fields(self):
