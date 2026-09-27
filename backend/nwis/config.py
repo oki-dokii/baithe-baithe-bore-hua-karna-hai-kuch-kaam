@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     job_lease_s: int = Field(default=180, ge=120, le=3600)
     job_max_attempts: int = Field(default=3, ge=1, le=5)
     extraction_provider: Literal["local_rules", "openai_compatible"] = "local_rules"
+    semantic_enabled: bool = False
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")

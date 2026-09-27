@@ -41,6 +41,7 @@ class Benchmark(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal["retrieval-questions-v1"]
     kind: Literal["synthetic", "public", "private"]
+    mode: Literal["full_text", "semantic"] = "full_text"
     dataset_id: UUID
     source_reference: str = Field(min_length=1)
     review_reference: str = Field(min_length=1)
@@ -72,6 +73,7 @@ def evaluate(benchmark: Benchmark, client, token: str):
             "question": case.question,
             "limit": 5,
             "offset": 0,
+            "mode": benchmark.mode,
         }
         for key in ("wellbore_id", "formation_id", "hazard", "min_md_m", "max_md_m"):
             value = getattr(case, key)
@@ -83,7 +85,10 @@ def evaluate(benchmark: Benchmark, client, token: str):
         if response.status_code != 200:
             raise ValueError(f"Question {case.id}: query returned HTTP {response.status_code}")
         result = response.json()
-        if result.get("retrieval_mode") != "postgresql_full_text":
+        expected_mode = (
+            "local_semantic" if benchmark.mode == "semantic" else "postgresql_full_text"
+        )
+        if result.get("retrieval_mode") != expected_mode:
             raise ValueError(f"Question {case.id}: unexpected retrieval mode")
         items = result.get("items")
         if not isinstance(items, list) or len(items) > 5:
@@ -125,7 +130,7 @@ def evaluate(benchmark: Benchmark, client, token: str):
         "manifest_sha256": digest,
         "kind": benchmark.kind,
         "dataset_id": str(benchmark.dataset_id),
-        "retrieval_mode": "postgresql_full_text",
+        "retrieval_mode": "local_semantic" if benchmark.mode == "semantic" else "postgresql_full_text",
         "question_count": len(cases),
         "positive_questions": positives,
         "expected_sources": expected_total,
@@ -141,7 +146,11 @@ def evaluate(benchmark: Benchmark, client, token: str):
         "limitations": [
             "Citation presence is not citation correctness or claim entailment; human review is required.",
             "Question and expected-source quality are asserted by the manifest, not verified by this tool.",
-            "Full-text retrieval is not semantic retrieval; no generated answer is evaluated.",
+            (
+                "Semantic similarity and cutoff are uncalibrated; no generated answer is evaluated."
+                if benchmark.mode == "semantic"
+                else "Full-text retrieval is not semantic retrieval; no generated answer is evaluated."
+            ),
         ],
         "gates": {
             "at_least_15_questions": len(cases) >= 15,

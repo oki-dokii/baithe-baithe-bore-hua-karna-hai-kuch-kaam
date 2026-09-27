@@ -119,6 +119,32 @@
   gap: 10px;
   margin: 25px 0 10px;
 }
+.search-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+.search-mode button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 12px;
+  font: 11px monospace;
+}
+.search-mode button.selected {
+  background: var(--ink);
+  color: var(--paper);
+}
+.search-mode button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.search-mode span {
+  color: var(--muted);
+  font: 10px monospace;
+}
 .search-primary input {
   flex: 1;
   min-width: 0;

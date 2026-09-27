@@ -85,6 +85,14 @@ type SearchResult = {
   }[];
   next_offset: number | null;
   abstention_reason: string | null;
+  retrieval_mode: string;
+  semantic_model: string | null;
+  notice: string;
+};
+type SearchCapabilities = {
+  full_text: boolean;
+  semantic: boolean;
+  semantic_model: string | null;
 };
 const readable = (s: string) => s.replaceAll("_", " ");
 const depth = (v: number | null) =>
@@ -219,6 +227,8 @@ export default function Intelligence({ token }: { token: string }) {
   const [record, setRecord] = useState<Case | null>(null);
   const [source, setSource] = useState<Citation | null>(null);
   const [question, setQuestion] = useState("");
+  const [searchMode, setSearchMode] = useState<"full_text" | "semantic">("full_text");
+  const [searchCapabilities, setSearchCapabilities] = useState<SearchCapabilities | null>(null);
   const [hazard, setHazard] = useState("");
   const [minimum, setMinimum] = useState("");
   const [maximum, setMaximum] = useState("");
@@ -234,6 +244,9 @@ export default function Intelligence({ token }: { token: string }) {
 
   useEffect(() => {
     let live = true;
+    request<SearchCapabilities>(token, "/search-capabilities")
+      .then((data) => live && setSearchCapabilities(data))
+      .catch(() => live && setSearchCapabilities(null));
     request<{ items: Well[] }>(token, "/intelligence/wellbores")
       .then((data) => {
         if (live) {
@@ -357,12 +370,14 @@ export default function Intelligence({ token }: { token: string }) {
         body: JSON.stringify({
           dataset_id: active.dataset_id,
           question,
+          mode: searchMode,
           hazard: hazard || null,
           formation_id: sameFormation
             ? intervals.find((i) => i.id === intervalId)?.formation_id
             : null,
           min_md_m: minimum === "" ? null : Number(minimum),
           max_md_m: maximum === "" ? null : Number(maximum),
+          limit: searchMode === "semantic" ? 5 : 10,
           offset,
         }),
       });
@@ -606,19 +621,42 @@ export default function Intelligence({ token }: { token: string }) {
         <p className="eyebrow">03 / Search the approved record</p>
         <h2>What has happened before?</h2>
         <p className="footnote">
-          Full-text search within the active well’s dataset. No semantic
-          embedding model or generated advice.
+          Search only approved, cited claims in the active well’s dataset. No
+          generated advice. Semantic matches are provisional candidates, not
+          evidence of risk.
         </p>
         <form onSubmit={search}>
+          <div className="search-mode" role="group" aria-label="Search method">
+            <button
+              type="button"
+              className={searchMode === "full_text" ? "selected" : ""}
+              aria-pressed={searchMode === "full_text"}
+              onClick={() => { setSearchMode("full_text"); setResults(null); }}
+            >
+              Exact terms
+            </button>
+            <button
+              type="button"
+              className={searchMode === "semantic" ? "selected" : ""}
+              aria-pressed={searchMode === "semantic"}
+              disabled={!searchCapabilities?.semantic}
+              onClick={() => { setSearchMode("semantic"); setResults(null); }}
+            >
+              Related meaning
+            </button>
+            {!searchCapabilities?.semantic && (
+              <span>Local semantic model not prepared</span>
+            )}
+          </div>
           <div className="search-primary">
             <label className="sr-only" htmlFor="evidence-query">
-              Search keywords
+              Search approved evidence
             </label>
             <input
               id="evidence-query"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder='Keywords, e.g. "mud losses"'
+              placeholder='Try "mud losses" or "circulation disappeared"'
             />
             <button disabled={!active || searching}>
               {searching ? "Searching…" : "Find evidence →"}
@@ -685,6 +723,11 @@ export default function Intelligence({ token }: { token: string }) {
         </form>
         {results && (
           <div aria-live="polite">
+            <p className="footnote">
+              {results.retrieval_mode === "local_semantic"
+                ? `Related-meaning candidates · ${results.semantic_model}. ${results.notice}`
+                : `Exact-term matches. ${results.notice}`}
+            </p>
             {results.items.length ? (
               results.items.map((r) => (
                 <article className="search-hit" key={r.id}>

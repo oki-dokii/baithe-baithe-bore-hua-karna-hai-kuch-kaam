@@ -1,6 +1,6 @@
 # Phase 3 — Offset atlas and historical evidence
 
-Core implementation: interactive nearby-well map, explainable analogue comparison, formation-relative mapping, approved case files and filtered full-text retrieval. **Phase 3 is not fully closed:** embedding-based semantic retrieval remains unimplemented. Phase 2's real-report and live-provider gates also remain open.
+Core implementation: interactive nearby-well map, explainable analogue comparison, formation-relative mapping, approved case files and filtered full-text retrieval. [Opt-in local semantic search](semantic-search.md) is now implemented for approved, cited claims; real-report relevance/abstention evaluation remains open. Phase 2's real-report and live-provider gates also remain open.
 
 ## Try the golden path
 
@@ -33,7 +33,7 @@ The Leaflet map uses WGS84 positions and an offline coordinate grid. It supports
 - `GET /api/v1/events/{id}/evidence/{passage_id}`: exact linked source representation, with role-based page visibility.
 - `POST /api/v1/query`: dataset-scoped PostgreSQL full-text search over approved descriptions/quotes; optional wellbore, canonical formation, hazard and overlapping source-MD filters. Bound `limit` and `offset`; `next_offset` signals another page. This read-only route is not an idempotent mutation.
 
-Search returns extractive evidence lists, never generated operating advice. It does not search unreviewed page text. Missing support produces `no_approved_supporting_evidence`, not a fabricated answer. **Semantic embeddings and natural-language synthesis are not present**; the response and UI identify full-text mode. Search's bounded offset pagination is an explicit prototype deviation from the original cursor contract.
+Search returns extractive evidence lists, never generated operating advice. It does not search unreviewed page text. Missing support produces `no_approved_supporting_evidence`, not a fabricated answer. Local semantic vectors are optional and require explicit model preparation/indexing; full-text remains the default. The response and UI identify the actual mode. Natural-language synthesis is not present. Search's bounded offset pagination is an explicit prototype deviation from the original cursor contract.
 
 A [read-only Phase 6 evaluator](../phase-6/README.md#fixed-question-retrieval-evaluation) now scores fixed questions against the approved source passages returned by this endpoint. It does not change search ranking, create embeddings or substitute synthetic fixtures for real-source evaluation.
 
@@ -49,4 +49,4 @@ NWIS_INTEGRATION=1 uv run --frozen --extra dev pytest -q
 
 `frontend/intelligence-smoke.mjs` tests the browser flow with a clearly labeled fictional uploaded/approved report and captures desktop/mobile screenshots in ignored `frontend/artifacts/`. Its Playwright environment variables match the Phase 2 smoke script. Test records remain labeled synthetic; do not use a production database. CI includes the new database integration checks and fresh container build.
 
-MAP-01 and COR-01/02 have prototype regression coverage. RET-01 has extractive cited results and abstention, not generated answers. RET-02 structured filtering is implemented; its semantic retrieval portion remains open. Maps require an existing reviewed target interval in this screen; the Phase 1 well directory remains available for raw radius inspection. No saved mapping snapshots, live alerts, trained risk model, approved private-data authorization scheme, retrieval-scale benchmark or real-geology validation is claimed. These are not production operational recommendations.
+MAP-01 and COR-01/02 have prototype regression coverage. RET-01 has extractive cited results and abstention, not generated answers. RET-02 structured filtering and opt-in local semantic candidate retrieval are implemented; independently reviewed real-report relevance and abstention scores remain open. Maps require an existing reviewed target interval in this screen; the Phase 1 well directory remains available for raw radius inspection. No saved mapping snapshots, live alerts, trained risk model, approved private-data authorization scheme, retrieval-scale benchmark or real-geology validation is claimed. These are not production operational recommendations.
