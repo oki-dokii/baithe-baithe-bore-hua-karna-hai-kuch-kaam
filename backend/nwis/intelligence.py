@@ -1,17 +1,24 @@
 """Read-only well intelligence. Heuristic mappings are not drilling predictions."""
 
 import math
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nwis.db import connection
+from nwis.config import get_settings
 from nwis.ingestion.contracts import Hazard
 from nwis.security import current_principal
+from nwis.semantic import MIN_COSINE, MODEL_ID, SemanticUnavailable, model, query_vector
 
 router = APIRouter(prefix="/api/v1")
 METHOD = "formation-relative-tvd-offset-v1"
+
+
+def semantic_active() -> bool:
+    return get_settings().semantic_enabled
 
 
 def interpolate(points, value, inverse=False):
@@ -328,6 +335,7 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     dataset_id: UUID
     question: str = Field(default="", max_length=1000)
+    mode: Literal["full_text", "semantic"] = "full_text"
     wellbore_id: UUID | None = None
     formation_id: UUID | None = None
     hazard: Hazard | None = None
@@ -344,33 +352,52 @@ class SearchRequest(BaseModel):
             and self.max_md_m < self.min_md_m
         ):
             raise ValueError("Depth interval is reversed")
+        if self.mode == "semantic" and not self.question.strip():
+            raise ValueError("Semantic search requires a question")
         return self
+
+
+@router.get("/search-capabilities")
+def search_capabilities(_principal=Depends(current_principal)):
+    if not semantic_active():
+        return {"full_text": True, "semantic": False, "semantic_model": None}
+    try:
+        model()
+    except SemanticUnavailable:
+        return {"full_text": True, "semantic": False, "semantic_model": None}
+    return {"full_text": True, "semantic": True, "semantic_model": MODEL_ID}
 
 
 @router.post("/query")
 def search(body: SearchRequest, _principal=Depends(current_principal)):
+    semantic_vector = None
+    if body.mode == "semantic":
+        if not semantic_active():
+            raise HTTPException(503, "Local semantic search is not enabled")
+        try:
+            semantic_vector = query_vector(body.question.strip())
+        except SemanticUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
     with connection() as conn:
         if not conn.execute("SELECT 1 FROM dataset WHERE id=%s", (body.dataset_id,)).fetchone():
             raise HTTPException(404, "Dataset not found")
         if body.wellbore_id and bore(conn, body.wellbore_id)["dataset_id"] != body.dataset_id:
             raise HTTPException(422, "Wellbore does not belong to the selected dataset")
         # Search approved claims, not whole source pages containing unreviewed material.
-        rows = conn.execute(
-            """SELECT e.id,e.event_type,e.description,e.start_md_m,e.end_md_m,w.name AS well_name,
+        projection = """SELECT e.id,e.event_type,e.description,e.start_md_m,e.end_md_m,w.name AS well_name,
             e.wellbore_id, e.quality_issues,
-            ts_rank_cd(to_tsvector('english',coalesce(e.description,'') || ' ' || coalesce(e.source_fields->>'quote','')),
-                websearch_to_tsquery('english',%s)) AS retrieval_score
+            {score} AS retrieval_score
             FROM drilling_event e JOIN wellbore b ON b.id=e.wellbore_id JOIN well w ON w.id=b.well_id
             LEFT JOIN formation_interval i ON i.id=e.formation_interval_id
+            {semantic_join}
             WHERE w.dataset_id=%s AND e.review_state='approved'
             AND EXISTS(SELECT 1 FROM event_passage ep WHERE ep.event_id=e.id)
             AND (%s::uuid IS NULL OR b.id=%s) AND (%s::uuid IS NULL OR i.formation_id=%s)
             AND (%s::text IS NULL OR e.event_type=%s)
             AND (%s::float IS NULL OR e.end_md_m>=%s) AND (%s::float IS NULL OR e.start_md_m<=%s)
-            AND (%s='' OR to_tsvector('english',coalesce(e.description,'') || ' ' || coalesce(e.source_fields->>'quote','')) @@ websearch_to_tsquery('english',%s))
-            ORDER BY retrieval_score DESC,e.id LIMIT %s OFFSET %s""",
-            (
-                body.question,
+            {text_condition}
+            ORDER BY retrieval_score DESC,e.id LIMIT %s OFFSET %s"""
+        filters = (
                 body.dataset_id,
                 body.wellbore_id,
                 body.wellbore_id,
@@ -382,11 +409,29 @@ def search(body: SearchRequest, _principal=Depends(current_principal)):
                 body.min_md_m,
                 body.max_md_m,
                 body.max_md_m,
-                body.question.strip(),
-                body.question,
-                body.limit + 1,
-                body.offset,
-            ),
+        )
+        if semantic_vector is None:
+            score = """ts_rank_cd(to_tsvector('english',coalesce(e.description,'') || ' ' ||
+                coalesce(e.source_fields->>'quote','')),websearch_to_tsquery('english',%s))"""
+            condition = """AND (%s='' OR to_tsvector('english',coalesce(e.description,'') || ' ' ||
+                coalesce(e.source_fields->>'quote','')) @@ websearch_to_tsquery('english',%s))"""
+            params = (body.question,) + filters + (
+                body.question.strip(), body.question, body.limit + 1, body.offset
+            )
+            semantic_join = ""
+        else:
+            score = "(1 - (s.embedding <=> %s::vector))"
+            semantic_join = "JOIN event_embedding s ON s.event_id=e.id"
+            condition = """AND s.model_id=%s
+                AND s.content_sha256=encode(digest(e.event_type || E'\\n' || coalesce(e.description,'') ||
+                    E'\\n' || coalesce(e.source_fields->>'quote',''),'sha256'),'hex')
+                AND (1 - (s.embedding <=> %s::vector)) >= %s"""
+            params = (semantic_vector,) + filters + (
+                MODEL_ID, semantic_vector, MIN_COSINE, body.limit + 1, body.offset
+            )
+        rows = conn.execute(
+            projection.format(score=score, semantic_join=semantic_join, text_condition=condition),
+            params,
         ).fetchall()
         items = []
         for row in rows[: body.limit]:
@@ -397,9 +442,13 @@ def search(body: SearchRequest, _principal=Depends(current_principal)):
         return {
             "items": items,
             "next_offset": body.offset + body.limit if len(rows) > body.limit else None,
-            "retrieval_mode": "postgresql_full_text",
-            "semantic_model": None,
+            "retrieval_mode": "local_semantic" if semantic_vector else "postgresql_full_text",
+            "semantic_model": MODEL_ID if semantic_vector else None,
             "answer_kind": "extractive_evidence_list",
             "abstention_reason": None if items else "no_approved_supporting_evidence",
-            "notice": "Source-backed historical claims only. No generated advice or semantic embedding model.",
+            "notice": (
+                "Local semantic candidates from approved claims; cutoff is provisional, not validated. "
+                "No generated advice."
+                if semantic_vector else "Source-backed historical claims only. No generated advice."
+            ),
         }

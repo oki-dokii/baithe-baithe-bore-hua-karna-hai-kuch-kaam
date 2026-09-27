@@ -12,6 +12,7 @@ from nwis.db import connection
 from nwis.main import app
 from nwis.retrieval_eval import Benchmark, evaluate
 from nwis.seed import load_fixture, stable_id
+from nwis.semantic import DIMENSION, MODEL_ID, claim_hash, vector_literal
 
 pytestmark = pytest.mark.skipif(
     os.getenv("NWIS_INTEGRATION") != "1", reason="Requires NWIS test database"
@@ -141,3 +142,63 @@ def test_spatial_correlation_filtered_search_and_citations():
                 "UPDATE drilling_event SET review_state='rejected' WHERE id=%s", (event_id,)
             )
     assert client.get(f"/api/v1/events/{event_id}", headers=headers).status_code == 404
+
+
+def test_semantic_search_uses_only_current_approved_cited_claims(monkeypatch):
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {get_settings().viewer_token}"}
+    with connection() as conn:
+        load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
+    dataset = stable_id("dataset", "nwis-synthetic-golden-v1")
+    passage = stable_id("passage", "SYN-DDR-B-001:1")
+    event_id = uuid4()
+    event = {
+        "event_type": "mud_loss",
+        "description": "SYNTHETIC TEST fluid disappeared into the formation",
+        "quote": "Mud losses occurred from 1930 to 1940 m MD.",
+    }
+    vector = vector_literal([1.0] + [0.0] * (DIMENSION - 1))
+    with connection() as conn:
+        conn.execute(
+            """INSERT INTO drilling_event(id,wellbore_id,event_type,description,review_state,
+                source_fields) VALUES(%s,%s,%s,%s,'approved',%s)""",
+            (
+                event_id,
+                stable_id("wellbore", "SYN-B-MAIN"),
+                event["event_type"],
+                event["description"],
+                Jsonb({"quote": event["quote"]}),
+            ),
+        )
+        conn.execute(
+            "INSERT INTO event_passage(event_id,passage_id) VALUES(%s,%s)",
+            (event_id, passage),
+        )
+        conn.execute(
+            """INSERT INTO event_embedding(event_id,model_id,content_sha256,embedding)
+                VALUES(%s,%s,%s,%s::vector)""",
+            (event_id, MODEL_ID, claim_hash(event), vector),
+        )
+    monkeypatch.setattr("nwis.intelligence.semantic_active", lambda: False)
+    body = {"dataset_id": str(dataset), "question": "circulation vanished", "mode": "semantic"}
+    assert client.post("/api/v1/query", json=body, headers=headers).status_code == 503
+    monkeypatch.setattr("nwis.intelligence.semantic_active", lambda: True)
+    monkeypatch.setattr("nwis.intelligence.query_vector", lambda _question: vector)
+    try:
+        response = client.post("/api/v1/query", json=body, headers=headers)
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["retrieval_mode"] == "local_semantic"
+        assert result["semantic_model"] == MODEL_ID
+        assert str(event_id) in [item["id"] for item in result["items"]]
+        assert result["items"][0]["citations"][0]["passage_id"] == str(passage)
+        with connection() as conn:
+            conn.execute(
+                "UPDATE drilling_event SET description=%s WHERE id=%s",
+                ("SYNTHETIC TEST corrected claim", event_id),
+            )
+        stale = client.post("/api/v1/query", json=body, headers=headers).json()
+        assert str(event_id) not in [item["id"] for item in stale["items"]]
+    finally:
+        with connection() as conn:
+            conn.execute("UPDATE drilling_event SET review_state='rejected' WHERE id=%s", (event_id,))

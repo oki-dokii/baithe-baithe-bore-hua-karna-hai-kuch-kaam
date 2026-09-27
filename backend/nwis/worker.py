@@ -6,6 +6,7 @@ import time
 
 from nwis.config import get_settings
 from nwis.ingestion.jobs import tick
+from nwis.semantic import index_approved
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _running = True
@@ -20,9 +21,17 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     logging.info("Document ingestion worker started")
+    next_semantic_scan = 0.0
     while _running:
         try:
-            if tick():
+            worked = tick()
+            if get_settings().semantic_enabled and time.monotonic() >= next_semantic_scan:
+                try:
+                    index_approved()
+                except Exception:
+                    logging.exception("Local semantic indexing unavailable; full-text search remains usable")
+                next_semantic_scan = time.monotonic() + 30
+            if worked:
                 continue
         except Exception:
             logging.exception("Worker database heartbeat failed")

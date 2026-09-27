@@ -11,7 +11,7 @@ COPY nwis ./nwis
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir uv==0.11.4 \
-    && uv sync --frozen --no-dev --no-cache
+    && uv sync --frozen --no-dev --extra semantic --no-cache
 
 ENV PATH="/app/.venv/bin:$PATH"
 

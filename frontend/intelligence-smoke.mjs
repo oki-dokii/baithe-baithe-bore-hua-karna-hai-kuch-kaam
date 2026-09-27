@@ -76,12 +76,12 @@ try {
     )
   )
     throw new Error("Wrong source citation");
-  await page.getByLabel("Search keywords").fill("mud losses");
+  await page.getByLabel("Search approved evidence").fill("mud losses");
   await page.getByLabel("Source MD from · m").fill("1900");
   await page.getByLabel("Source MD to · m").fill("2000");
   await page.getByRole("button", { name: "Find evidence" }).click();
   await page.locator(".search-hit").first().waitFor();
-  await page.getByLabel("Search keywords").fill("nonexistentunicorn");
+  await page.getByLabel("Search approved evidence").fill("nonexistentunicorn");
   await page.getByRole("button", { name: "Find evidence" }).click();
   await page
     .getByText("No approved supporting evidence matches these filters.", {

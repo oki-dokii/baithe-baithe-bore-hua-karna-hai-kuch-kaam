@@ -115,3 +115,19 @@ def test_empty_response_without_explicit_abstention_is_not_counted_correct():
     assert report["correct_abstentions"] == 0
     assert report["incorrect_abstentions"] == 1
     assert report["false_abstentions"] == 1
+
+
+def test_semantic_mode_is_explicit_and_scored_separately():
+    passage = uuid4()
+    benchmark = manifest(passage, 2).model_copy(update={"mode": "semantic"})
+
+    class SemanticClient(StubClient):
+        def post(self, path, json, headers):
+            assert json["mode"] == "semantic"
+            reply = super().post(path, json, headers)
+            reply.body["retrieval_mode"] = "local_semantic"
+            return reply
+
+    report = evaluate(benchmark, SemanticClient(passage), "test-token")
+    assert report["retrieval_mode"] == "local_semantic"
+    assert report["source_recall_at_5"] == 1

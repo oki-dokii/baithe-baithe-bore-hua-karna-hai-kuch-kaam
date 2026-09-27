@@ -23,7 +23,9 @@ app.include_router(ingestion_router)
 app.include_router(intelligence_router)
 app.include_router(operations_router)
 app.include_router(prediction_router)
-_fixture_path = Path("/app/specs/fixtures/golden-demo.json")
+_fixture_path = Path(__file__).resolve().parents[1] / "specs/fixtures/golden-demo.json"
+if not _fixture_path.is_file():
+    _fixture_path = Path(__file__).resolve().parents[2] / "specs/fixtures/golden-demo.json"
 
 
 def error(code: str, message: str, request_id: str, details: dict | None = None) -> dict:

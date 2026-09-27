@@ -27,6 +27,8 @@ services:
       NWIS_ADMIN_TOKEN: ${NWIS_ADMIN_TOKEN:?Set NWIS_ADMIN_TOKEN in .env}
       NWIS_STORAGE_ROOT: /app/storage
       NWIS_EXTRACTION_PROVIDER: ${NWIS_EXTRACTION_PROVIDER:-local_rules}
+      NWIS_SEMANTIC_ENABLED: ${NWIS_SEMANTIC_ENABLED:-false}
+      NWIS_SEMANTIC_CACHE_DIR: /app/storage/models
       NWIS_LLM_BASE_URL: ${NWIS_LLM_BASE_URL:-https://api.openai.com/v1}
       NWIS_LLM_MODEL: ${NWIS_LLM_MODEL:-}
       NWIS_LLM_API_KEY: ${NWIS_LLM_API_KEY:-}

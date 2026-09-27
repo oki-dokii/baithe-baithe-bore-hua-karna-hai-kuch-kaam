@@ -36,6 +36,7 @@ artifacts/
 *.dump
 *.pkl
 *.joblib
+*.ses
 
 # Local OS/editor files
 .DS_Store
