@@ -46,6 +46,28 @@ cleanup() {
   wait "$nwis_api_pid" "$nwis_worker_pid" "$nwis_replay_pid" "$nwis_web_pid" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+wait_for_demo_service() {
+  local nwis_name="$1"
+  local nwis_url="$2"
+  local nwis_attempt
+  for ((nwis_attempt = 1; nwis_attempt <= 30; nwis_attempt++)); do
+    if ! kill -0 "$nwis_api_pid" 2>/dev/null || ! kill -0 "$nwis_worker_pid" 2>/dev/null \
+      || ! kill -0 "$nwis_replay_pid" 2>/dev/null || ! kill -0 "$nwis_web_pid" 2>/dev/null; then
+      echo "A demo process exited before $nwis_name became ready." >&2
+      return 1
+    fi
+    if curl --fail --silent --show-error --max-time 2 --output /dev/null "$nwis_url" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "$nwis_name did not become ready within 30 seconds." >&2
+  return 1
+}
+
+wait_for_demo_service "API" "http://127.0.0.1:18083/healthz"
+wait_for_demo_service "web preview" "http://127.0.0.1:13003/"
 echo "Synthetic one-source demo: http://127.0.0.1:13003/"
 echo "Uses local role tokens from .env; press Ctrl-C to stop only these four processes."
 while kill -0 "$nwis_api_pid" 2>/dev/null && kill -0 "$nwis_worker_pid" 2>/dev/null \
