@@ -1,0 +1,15 @@
+# Mud-loss window adapter — offline contract prototype
+
+`nwis.mud_loss_adapter` prepares the existing 100 m depth-horizon `DatasetManifest` from **explicit source assertions**, not from the replay feed. It adds no model or deployed score. Run the owned synthetic example from `backend`:
+
+```sh
+.venv/bin/python -m nwis.mud_loss_adapter ../specs/fixtures/mud-loss-adapter-example.json --out ../data/raw/synthetic-mud-loss-windows.json
+```
+
+The command writes only to the explicitly supplied local path and prints counts/blockers, not telemetry values. The example exits 2 because `prediction.audit()` correctly blocks synthetic-only validation and lacks sufficient independent split/class coverage. The emitted JSON can be inspected as a software fixture, **not** used to claim training authorization.
+
+The adapter refuses a window unless: the five canonical sensor values are good-quality forward-drilling observations available by the prediction anchor; exactly one reviewed mud-density record was recorded and effective by that anchor at its MD; exactly one reviewed coverage interval includes the full next 100 m; and either a reviewed, timezone-bounded, depth/datum-reviewed loss onset occurs strictly after sensor availability or reviewed event-free coverage supports a negative. Overlapping mud-density or coverage records, uncertain pre-event timing, multiple onsets, incomplete outcome coverage and contradictory event-free claims fail closed. It preserves physical-well split IDs and provenance references in the output for the existing audit.
+
+This is **not yet a source-specific DDR–WITSML join**. There is no `drilling_parameter_sample` table in this repo. The existing `telemetry_sample` is replay-oriented and its JSON channels do not prove source units, quality, rig state, corrections or historical coverage. `mud_program.mud_density_kg_m3` has no recorded/effective timestamps or review lineage, so it cannot be silently joined to an anchor. `drilling_event` can contain reviewer-entered onset bounds, but a cited event alone does not establish its time/depth match to telemetry. A real importer must verify source rights, physical-well identities, per-channel units and availability, timezones, datums, corrections, drilling state, coverage and source citations before constructing this input. The fields `reviewed` and `domain_reviewed` are assertions in a JSON file, not independently authenticated by the adapter.
+
+The pasted training sketch also needs revision before use: its `load_manifest()` rejects all synthetic manifests because `audit()` intentionally includes `synthetic_only_not_real_validation`; `calibration_curve()` measures calibration but does not calibrate a model; and a constant prevalence baseline has ROC-AUC 0.5 by construction when both classes are present. Track A may fit a **synthetic software demo** only under an explicit demo-only state. Track B needs a permitted source-specific import, independent adjudication, well-grouped splits and untouched held-out wells. Neither track may turn this contract prototype into a live risk score.
