@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { DepthTrack, MitigationGraph, MudWindow, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
 
 type Well = {
   id: string;
@@ -119,15 +120,21 @@ function WellMap({
   candidates,
   radius,
   onSelect,
+  onPlan,
+  planningPoint,
 }: {
   active: Well;
   candidates: Analogue[];
   radius: number;
   onSelect: (id: string) => void;
+  onPlan: (point: PlanningPoint) => void;
+  planningPoint: PlanningPoint | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const callback = useRef(onSelect);
   callback.current = onSelect;
+  const planCallback = useRef(onPlan);
+  planCallback.current = onPlan;
   useEffect(() => {
     if (!root.current) return;
     const map = L.map(root.current, {
@@ -136,6 +143,10 @@ function WellMap({
       scrollWheelZoom: false,
       attributionControl: false,
     });
+    map.on("click", (event) => planCallback.current({ latitude: event.latlng.lat, longitude: event.latlng.lng }));
+    if (planningPoint) L.circleMarker([planningPoint.latitude, planningPoint.longitude], {
+      radius: 8, color: "#a05d3c", fillColor: "#fffefb", weight: 3, fillOpacity: 1,
+    }).addTo(map).bindTooltip("Hypothetical planning point");
     const ring = L.circle([active.latitude, active.longitude], {
       radius: radius * 1000,
       color: "#78896d",
@@ -205,7 +216,7 @@ function WellMap({
       observer.disconnect();
       map.remove();
     };
-  }, [active, candidates, radius]);
+  }, [active, candidates, radius, planningPoint]);
   return (
     <div
       className="well-map"
@@ -224,6 +235,7 @@ export default function Intelligence({ token }: { token: string }) {
   const [radius, setRadius] = useState(5);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [selected, setSelected] = useState("");
+  const [planningPoint, setPlanningPoint] = useState<PlanningPoint | null>(null);
   const [record, setRecord] = useState<Case | null>(null);
   const [source, setSource] = useState<Citation | null>(null);
   const [question, setQuestion] = useState("");
@@ -271,6 +283,7 @@ export default function Intelligence({ token }: { token: string }) {
     setRecord(null);
     setSource(null);
     setResults(null);
+    setPlanningPoint(null);
     caseSequence.current++;
     if (activeId)
       request<{ intervals: Interval[] }>(
@@ -474,13 +487,15 @@ export default function Intelligence({ token }: { token: string }) {
                 candidates={comparison.items}
                 radius={radius}
                 onSelect={id => { setSelected(id); setRecord(null); setSource(null); caseSequence.current++; }}
+                onPlan={setPlanningPoint}
+                planningPoint={planningPoint}
               />
               <div className="map-caption">
                 <span>
                   WGS84 · {active.latitude.toFixed(4)}°,{" "}
                   {active.longitude.toFixed(4)}°
                 </span>
-                <span>Offline coordinate map · no terrain tiles</span>
+                <span>Click the map to inspect a hypothetical point · no terrain tiles</span>
               </div>
             </div>
             <aside className="analogue-index">
@@ -527,6 +542,11 @@ export default function Intelligence({ token }: { token: string }) {
               Showing the nearest 100 wellbores only. Narrow the radius.
             </p>
           )}
+          <PlanningPanel token={token} datasetId={active.dataset_id} point={planningPoint}
+            radius={radius} formationId={intervals.find((item) => item.id === intervalId)?.formation_id ?? null}
+            onOpenCase={openCase} />
+          <DepthTrack token={token} wellboreId={activeId} onOpenCase={openCase} />
+          <MudWindow token={token} wellboreId={activeId} />
           {candidate && (
             <section className="comparison-panel">
               <div className="section-heading">
@@ -768,6 +788,7 @@ export default function Intelligence({ token }: { token: string }) {
           </div>
         )}
       </section>
+      {active && <MitigationGraph token={token} datasetId={active.dataset_id} onOpenCase={openCase} />}
       {record && (
         <section className="case-panel" aria-label="Historical event case file">
           <div className="section-heading">

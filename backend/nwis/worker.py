@@ -7,6 +7,7 @@ import time
 from nwis.config import get_settings
 from nwis.ingestion.jobs import tick
 from nwis.semantic import index_approved
+from nwis.voice_retention import purge_expired_audio
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _running = True
@@ -22,9 +23,13 @@ def main() -> None:
     signal.signal(signal.SIGINT, stop)
     logging.info("Document ingestion worker started")
     next_semantic_scan = 0.0
+    next_voice_purge = 0.0
     while _running:
         try:
             worked = tick()
+            if time.monotonic() >= next_voice_purge:
+                purge_expired_audio()
+                next_voice_purge = time.monotonic() + 3600
             if get_settings().semantic_enabled and time.monotonic() >= next_semantic_scan:
                 try:
                     index_approved()

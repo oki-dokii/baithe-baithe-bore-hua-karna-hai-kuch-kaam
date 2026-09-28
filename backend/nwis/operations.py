@@ -24,6 +24,8 @@ DEPTHS = (2029.0, 2030.0, 2030.0, 2031.0, 2141.0)
 LOOKAHEAD = 100.0
 STALE_SECONDS = 15
 RULE = "historical-lookahead-v1"
+SHIFT_SECONDS = 12 * 60 * 60  # Replay policy, not an assertion about OIL field shifts.
+ADVISORY_HAZARDS = frozenset({"other", "torque_spike"})
 TARGET = stable_id("interval", "A-F1")
 ACTIVE = stable_id("wellbore", "SYN-A-MAIN")
 
@@ -32,6 +34,7 @@ class CreateReplay(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     scenario_id: Literal["golden-mud-loss-v1"] = SCENARIO
     speed: float = Field(default=1, ge=0.1, le=10)
+    advisory_cap: int = Field(default=3, ge=0, le=20)
 
 
 class Control(BaseModel):
@@ -62,20 +65,32 @@ def episode(session_id, hazard, mapped_start):
     return f"{session_id}:{TARGET}:{hazard}:{math.floor(mapped_start / 50)}"
 
 
-def new_session(conn, actor, speed, parent=None):
+def priority_class(support) -> str:
+    """Only explicitly low-severity, non-well-control replay cases may be budgeted."""
+    return ("advisory" if all(event["severity"] == "low"
+            and event["event_type"] in ADVISORY_HAZARDS for event, *_ in support)
+            else "safety_critical")
+
+
+def shift_number(session, now: datetime) -> int:
+    return max(0, int((now - session["created_at"]).total_seconds() // SHIFT_SECONDS))
+
+
+def new_session(conn, actor, speed, parent=None, advisory_cap=3):
     if not conn.execute("SELECT 1 FROM wellbore WHERE id=%s", (ACTIVE,)).fetchone():
         raise HTTPException(409, "Load the owned golden fixture before starting replay")
     session_id = uuid4()
     conn.execute(
-        """INSERT INTO replay_session(id,active_wellbore_id,scenario_id,state,speed,created_by,parent_session_id)
-        VALUES(%s,%s,%s,'paused',%s,%s,%s)""",
-        (session_id, ACTIVE, SCENARIO, speed, actor, parent),
+        """INSERT INTO replay_session(id,active_wellbore_id,scenario_id,state,speed,created_by,parent_session_id,advisory_cap)
+        VALUES(%s,%s,%s,'paused',%s,%s,%s,%s)""",
+        (session_id, ACTIVE, SCENARIO, speed, actor, parent, advisory_cap),
     )
     conn.execute(
         "INSERT INTO audit_log(actor_name,action,entity_type,entity_id) VALUES(%s,'create_replay','replay_session',%s)",
         (actor, session_id),
     )
-    return {"id": str(session_id), "revision": 1, "state": "paused", "source_mode": "SIMULATED"}
+    return {"id": str(session_id), "revision": 1, "state": "paused",
+            "source_mode": "SIMULATED", "advisory_cap": advisory_cap}
 
 
 @router.post("/replay-sessions", status_code=201)
@@ -95,7 +110,7 @@ def create_replay(
             principal.name,
             idempotency_key,
             digest,
-            new_session(conn, principal.name, body.speed),
+            new_session(conn, principal.name, body.speed, advisory_cap=body.advisory_cap),
         )
 
 
@@ -173,6 +188,7 @@ def advance(conn, session):
             key = episode(session["id"], event["event_type"], mapping["mapped_start_md_m"])
             eligible.setdefault(key, []).append((event, mapping, citations, candidate))
     update_evidence_health(conn, session["id"])
+    budget_shift = shift_number(session, now)
     for key, support in eligible.items():
         in_window = any(
             should_alert(md, m["mapped_start_md_m"], m["mapped_end_md_m"]) for _, m, _, _ in support
@@ -182,6 +198,39 @@ def advance(conn, session):
         ).fetchone()
         if not in_window and not existing:
             continue
+        priority = priority_class(support)
+        if not existing and priority == "advisory":
+            suppressed_before = conn.execute(
+                "SELECT 1 FROM alert_suppression WHERE replay_session_id=%s AND episode_key=%s",
+                (session["id"], key),
+            ).fetchone()
+            if suppressed_before:
+                continue
+            issued = conn.execute(
+                """SELECT count(*) AS n FROM alert WHERE replay_session_id=%s
+                   AND priority_class='advisory' AND budget_shift=%s""",
+                (session["id"], budget_shift),
+            ).fetchone()["n"]
+            if issued >= session["advisory_cap"]:
+                event, mapping, citations, _candidate = support[0]
+                suppression_id = uuid4()
+                conn.execute(
+                    """INSERT INTO alert_suppression
+                       (id,replay_session_id,episode_key,budget_shift,event_id,passage_id,
+                        hazard_type,mapped_start_md_m,reason)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'fixed_advisory_cap_reached')""",
+                    (suppression_id, session["id"], key, budget_shift, event["id"],
+                     citations[0]["passage_id"], event["event_type"],
+                     mapping["mapped_start_md_m"]),
+                )
+                append_decision(
+                    conn, actor="nwis-replay", action="advisory_suppressed",
+                    entity_type="alert_suppression", entity_id=suppression_id,
+                    payload={"session_id": str(session["id"]), "episode_key": key,
+                             "budget_shift": budget_shift, "event_id": str(event["id"]),
+                             "reason": "fixed_advisory_cap_reached"},
+                )
+                continue
         start = min(m["mapped_start_md_m"] for _, m, _, _ in support)
         end = max(m["mapped_end_md_m"] for _, m, _, _ in support)
         relevance = "passed" if md > end else "at_interval" if md >= start else "upcoming"
@@ -196,8 +245,9 @@ def advance(conn, session):
             alert_id = uuid4()
             conn.execute(
                 """INSERT INTO alert(id,active_wellbore_id,replay_session_id,target_interval_id,hazard_type,
-                depth_band,episode_key,current_md_m,rule_version,config_version,relevance)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'golden-v1',%s)""",
+                depth_band,episode_key,current_md_m,rule_version,config_version,relevance,
+                priority_class,budget_shift)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'golden-v1',%s,%s,%s)""",
                 (
                     alert_id,
                     ACTIVE,
@@ -209,6 +259,8 @@ def advance(conn, session):
                     md,
                     RULE,
                     relevance,
+                    priority,
+                    budget_shift,
                 ),
             )
         for event, mapping, citations, candidate in support:
@@ -325,7 +377,8 @@ def control(
                 "UPDATE replay_session SET state='stopped',revision=revision+1 WHERE id=%s",
                 (session_id,),
             )
-            result = new_session(conn, principal.name, session["speed"], session_id)
+            result = new_session(conn, principal.name, session["speed"], session_id,
+                                 session["advisory_cap"])
         elif body.action == "step":
             if session["state"] != "paused":
                 raise HTTPException(409, "Pause the replay before stepping")
@@ -382,6 +435,21 @@ def snapshot(session_id: UUID, _principal=Depends(current_principal)):
             "SELECT * FROM alert WHERE replay_session_id=%s ORDER BY first_seen_at,id",
             (session_id,),
         ).fetchall()
+        budget_shift = shift_number(session, datetime.now(timezone.utc))
+        suppressed = conn.execute(
+            """SELECT s.id,s.event_id,s.passage_id,s.hazard_type,s.mapped_start_md_m,
+                      s.reason,s.recorded_at,w.name AS source_well,d.filename,p.page_number
+               FROM alert_suppression s
+               JOIN drilling_event e ON e.id=s.event_id
+               JOIN wellbore b ON b.id=e.wellbore_id JOIN well w ON w.id=b.well_id
+               JOIN extracted_passage p ON p.id=s.passage_id
+               JOIN source_document d ON d.id=p.document_id
+               WHERE s.replay_session_id=%s AND s.budget_shift=%s
+               ORDER BY s.recorded_at,s.id""",
+            (session_id, budget_shift),
+        ).fetchall()
+        issued_advisories = sum(item["priority_class"] == "advisory"
+                                and item["budget_shift"] == budget_shift for item in alerts)
         for item in alerts:
             item["evidence"] = conn.execute(
                 """SELECT ae.*,e.review_state AS current_review_state,e.version AS current_event_version
@@ -405,6 +473,12 @@ def snapshot(session_id: UUID, _principal=Depends(current_principal)):
             "stale": not sample
             or (datetime.now(timezone.utc) - sample["received_at"]).total_seconds() > STALE_SECONDS,
             "alerts": alerts,
+            "alert_budget": {"kind": "fixed_per_replay_shift", "shift_hours": 12,
+                             "shift_number": budget_shift, "advisory_cap": session["advisory_cap"],
+                             "issued_advisories": issued_advisories,
+                             "suppressed_count": len(suppressed), "suppressed": suppressed,
+                             "safety_critical_bypass": True,
+                             "notice": "Fixed advisory cap only; not conformal and not a safety guarantee."},
             "source_mode": "SIMULATED",
             "lookahead_m": LOOKAHEAD,
             "risk_score": None,

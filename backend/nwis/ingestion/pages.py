@@ -20,6 +20,9 @@ class Page:
     ocr_confidence: float | None = None
     preview_key: str | None = None
     word_boxes: list | None = None
+    transcription_confidence: float | None = None
+    transcription_confidence_kind: str | None = None
+    transcription_language: str | None = None
 
 
 def run_command(command: list[str]) -> bytes:

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -7,18 +8,27 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse
 from psycopg.types.json import Jsonb
+from pydantic import BaseModel, ConfigDict, Field
 
 from nwis.config import get_settings
 from nwis.db import connection
 from nwis.decision_ledger import append_decision, text_digest
 from nwis.ingestion.contracts import Candidate, ManualCandidateRequest, ReviewRequest
-from nwis.ingestion.extract import quote_is_supported
+from nwis.ingestion.extract import local_candidates, quote_is_supported
 from nwis.ingestion.normalize import normalization_context, normalize
 from nwis.ingestion.storage import path_for, store_blob
 from nwis.provenance import may_approve_event
 from nwis.security import Principal, current_principal, require_role
+from nwis.voice import local_asr_available
 
 router = APIRouter(prefix="/api/v1")
+
+
+class TranscriptCorrection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_review_version: int = Field(ge=1)
+    text: str = Field(min_length=1, max_length=30000)
+    rationale: str = Field(min_length=3, max_length=2000)
 
 
 def receipt(conn, actor, key, payload):
@@ -51,6 +61,7 @@ def me(principal: Principal = Depends(current_principal)):
         "role": principal.role,
         "extraction_provider": get_settings().extraction_provider,
         "document_max_pages": get_settings().document_max_pages,
+        "voice_local_asr_available": local_asr_available(),
     }
 
 
@@ -165,12 +176,94 @@ async def upload(
         )
 
 
+@router.post("/voice-memos", status_code=202)
+async def upload_voice_memo(
+    dataset_id: UUID = Form(...), wellbore_id: UUID = Form(...),
+    language: str = Form(...), consent: bool = Form(...),
+    transcript: str = Form(""), audio: UploadFile = File(...),
+    idempotency_key: str = Header(...),
+    principal=Depends(require_role("engineer", "reviewer")),
+):
+    if not consent:
+        raise HTTPException(422, "Explicit recording and retention consent is required")
+    if language not in ("as", "hi", "en"):
+        raise HTTPException(422, "Choose Assamese, Hindi or English")
+    transcript = transcript.strip()
+    if len(transcript) > get_settings().page_max_characters:
+        raise HTTPException(422, "Transcript exceeds the page text limit")
+    if not transcript and not local_asr_available():
+        raise HTTPException(422, "Provide a typed transcript or configure local ASR")
+    content = bytearray()
+    while chunk := await audio.read(65536):
+        content.extend(chunk)
+        if len(content) > min(get_settings().upload_max_bytes, 8 * 1024 * 1024):
+            raise HTTPException(413, "Voice memo exceeds the 8 MB limit")
+    if len(content) < 44:
+        raise HTTPException(415, "Voice memo audio is empty or invalid")
+    if content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        mime, extension = "audio/wav", "wav"
+    elif content[:4] == b"\x1aE\xdf\xa3":
+        mime, extension = "audio/webm", "webm"
+    elif content[4:8] == b"ftyp":
+        mime, extension = "audio/mp4", "m4a"
+    else:
+        raise HTTPException(415, "Upload WAV, WebM or M4A audio")
+    checksum = hashlib.sha256(content).hexdigest()
+    with connection() as conn:
+        digest, old = receipt(conn, principal.name, idempotency_key,
+                              ["voice_memo", dataset_id, wellbore_id, checksum,
+                               language, hashlib.sha256(transcript.encode()).hexdigest()])
+        if old:
+            return old
+        valid = conn.execute(
+            """SELECT d.kind FROM wellbore b JOIN well w ON w.id=b.well_id
+               JOIN dataset d ON d.id=w.dataset_id WHERE b.id=%s AND d.id=%s""",
+            (wellbore_id, dataset_id),
+        ).fetchone()
+        if not valid:
+            raise HTTPException(422, "Wellbore does not belong to this dataset")
+        if conn.execute("SELECT 1 FROM source_document WHERE dataset_id=%s AND sha256=%s",
+                        (dataset_id, checksum)).fetchone():
+            raise HTTPException(409, "This audio is already archived")
+        document_id, job_id = uuid4(), uuid4()
+        key = f"voice/{dataset_id}/{checksum}.{extension}"
+        store_blob(key, bytes(content))
+        conn.execute(
+            """INSERT INTO source_document
+               (id,dataset_id,external_id,storage_key,sha256,filename,mime_type,
+                byte_size,access_class,uploaded_by,doc_type)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'voice_memo')""",
+            (document_id, dataset_id, str(document_id), key, checksum,
+             f"voice-memo-{document_id}.{extension}", mime, len(content),
+             valid["kind"], principal.name),
+        )
+        conn.execute("INSERT INTO document_wellbore(document_id,wellbore_id) VALUES(%s,%s)",
+                     (document_id, wellbore_id))
+        conn.execute(
+            """INSERT INTO voice_memo(document_id,language,transcription_mode,
+               typed_transcript,consent_at,audio_retention_until)
+               VALUES (%s,%s,%s,%s,now(),now()+interval '30 days')""",
+            (document_id, language, "typed" if transcript else "local_asr",
+             transcript or None),
+        )
+        conn.execute("INSERT INTO ingestion_job(id,document_id,stage) VALUES(%s,%s,'extract')",
+                     (job_id, document_id))
+        conn.execute(
+            "INSERT INTO audit_log(actor_name,action,entity_type,entity_id) VALUES(%s,'upload_voice_memo','document',%s)",
+            (principal.name, document_id),
+        )
+        return save_receipt(conn, principal.name, idempotency_key, digest,
+                            {"id": str(document_id), "doc_type": "voice_memo",
+                             "transcription_mode": "typed" if transcript else "local_asr",
+                             "audio_retention_days": 30})
+
+
 @router.get("/documents")
 def documents(principal=Depends(current_principal)):
     reviewer = principal.role in ("reviewer", "admin")
     with connection() as conn:
         return conn.execute(
-            """SELECT d.id,d.filename,d.ingest_status,d.page_count,d.created_at,ds.kind,
+            """SELECT d.id,d.filename,d.doc_type,d.ingest_status,d.page_count,d.created_at,ds.kind,
             ds.qualification_status,ds.origin_kind,ds.authorization_state,ds.applicability,
             (SELECT count(*) FROM document_event_draft c WHERE c.document_id=d.id AND c.state='needs_review') AS pending_count
             FROM source_document d JOIN dataset ds ON ds.id=d.dataset_id WHERE d.uploaded_by IS NOT NULL
@@ -220,8 +313,10 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
                 candidate.pop("original_fields", None)
         pages = (
             conn.execute(
-                """SELECT id,page_number,raw_text,ocr_applied,ocr_confidence,preview_key IS NOT NULL AS has_preview
-            FROM extracted_passage WHERE document_id=%s ORDER BY page_number""",
+            """SELECT DISTINCT ON (page_number) id,page_number,raw_text,ocr_applied,ocr_confidence,
+               transcription_confidence,transcription_confidence_kind,transcription_language,
+               preview_key IS NOT NULL AS has_preview
+            FROM extracted_passage WHERE document_id=%s ORDER BY page_number,text_version DESC""",
                 (document_id,),
             ).fetchall()
             if reviewer
@@ -245,6 +340,7 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
             "id": document_id,
             "dataset_id": document["dataset_id"],
             "filename": document["filename"],
+            "doc_type": document["doc_type"],
             **provenance,
             "approval_allowed": may_approve_event(provenance),
             "ingest_status": document["ingest_status"],
@@ -254,6 +350,115 @@ def detail(document_id: UUID, principal=Depends(current_principal)):
             "jobs": jobs,
             "audit": audit,
         }
+
+
+@router.get("/documents/{document_id}/audio")
+def voice_audio(document_id: UUID, principal=Depends(current_principal)):
+    with connection() as conn:
+        document, reviewer = get_document(conn, document_id, principal)
+        if document["doc_type"] != "voice_memo" or not (
+            reviewer or document["uploaded_by"] == principal.name
+        ):
+            raise HTTPException(404, "Voice memo unavailable")
+        memo = conn.execute(
+            """SELECT audio_retention_until,audio_purged_at FROM voice_memo
+               WHERE document_id=%s""", (document_id,)
+        ).fetchone()
+    if not memo or memo["audio_purged_at"] or memo["audio_retention_until"] <= datetime.now(timezone.utc):
+        raise HTTPException(404, "Voice audio expired")
+    audio_path = path_for(document["storage_key"])
+    if not audio_path.is_file():
+        raise HTTPException(404, "Voice audio unavailable")
+    return FileResponse(audio_path, media_type=document["mime_type"],
+                        headers={"Cache-Control": "no-store"})
+
+
+@router.post("/voice-memos/{document_id}/transcript")
+def correct_voice_transcript(
+    document_id: UUID, body: TranscriptCorrection,
+    idempotency_key: str = Header(...),
+    principal=Depends(require_role("engineer", "reviewer")),
+):
+    corrected = body.text.strip()
+    if not corrected or len(corrected) > get_settings().page_max_characters:
+        raise HTTPException(422, "Corrected transcript is empty or too long")
+    with connection() as conn:
+        digest, old = receipt(conn, principal.name, idempotency_key,
+                              ["correct_voice_transcript", document_id, body.model_dump()])
+        if old:
+            return old
+        document = conn.execute("SELECT * FROM source_document WHERE id=%s FOR UPDATE",
+                                (document_id,)).fetchone()
+        if not document or document["doc_type"] != "voice_memo":
+            raise HTTPException(404, "Voice memo not found")
+        if principal.role not in ("reviewer", "admin") and document["uploaded_by"] != principal.name:
+            raise HTTPException(403, "Only the uploader or a reviewer may correct this transcript")
+        if document["review_version"] != body.expected_review_version:
+            raise HTTPException(409, "Transcript changed; refresh before correcting")
+        if conn.execute(
+            "SELECT 1 FROM document_event_draft WHERE document_id=%s AND state='approved'",
+            (document_id,),
+        ).fetchone():
+            raise HTTPException(409, "Approved claims require a new source version")
+        memo = conn.execute(
+            "SELECT language,audio_retention_until,audio_purged_at FROM voice_memo WHERE document_id=%s",
+            (document_id,),
+        ).fetchone()
+        if not memo or memo["audio_purged_at"] or memo["audio_retention_until"] <= datetime.now(timezone.utc):
+            raise HTTPException(409, "Audio expired; transcript can no longer be checked")
+        previous = conn.execute(
+            """SELECT id,raw_text,text_version FROM extracted_passage
+               WHERE document_id=%s AND page_number=1 ORDER BY text_version DESC LIMIT 1""",
+            (document_id,),
+        ).fetchone()
+        if not previous:
+            raise HTTPException(409, "Transcription has not finished")
+        if corrected == previous["raw_text"]:
+            raise HTTPException(422, "Corrected transcript is unchanged")
+        passage_id = uuid4()
+        conn.execute(
+            """INSERT INTO extracted_passage
+               (id,document_id,page_number,raw_text,ocr_applied,text_version,
+                transcription_language)
+               VALUES (%s,%s,1,%s,false,%s,%s)""",
+            (passage_id, document_id, corrected, previous["text_version"] + 1,
+             memo["language"]),
+        )
+        conn.execute(
+            """UPDATE document_event_draft SET state='rejected',version=version+1
+               WHERE document_id=%s AND state='needs_review'""", (document_id,),
+        )
+        context = normalization_context(conn, conn.execute(
+            "SELECT wellbore_id FROM document_wellbore WHERE document_id=%s",
+            (document_id,),
+        ).fetchone()["wellbore_id"])
+        for candidate in local_candidates(corrected):
+            normalized, issues = normalize(candidate, context)
+            issues.append("voice_transcript_verify")
+            fields = Jsonb(candidate.model_dump())
+            conn.execute(
+                """INSERT INTO document_event_draft
+                   (id,document_id,passage_id,original_fields,current_fields,normalized_fields,issues)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (uuid4(), document_id, passage_id, fields, fields,
+                 Jsonb(normalized), Jsonb(issues)),
+            )
+        conn.execute(
+            """UPDATE source_document SET review_version=review_version+1,
+               ingest_status='needs_review' WHERE id=%s""", (document_id,),
+        )
+        append_decision(
+            conn, actor=principal.name, action="voice_transcript_corrected",
+            entity_type="source_document", entity_id=document_id,
+            payload={"old_passage_id": str(previous["id"]),
+                     "new_passage_id": str(passage_id),
+                     "old_text_sha256": text_digest(previous["raw_text"]),
+                     "new_text_sha256": text_digest(corrected),
+                     "rationale_sha256": text_digest(body.rationale)},
+        )
+        return save_receipt(conn, principal.name, idempotency_key, digest,
+                            {"passage_id": str(passage_id),
+                             "text_version": previous["text_version"] + 1})
 
 
 @router.get("/documents/{document_id}/pages/{page_id}/preview")
@@ -312,8 +517,23 @@ def review(
         )
         if old:
             return old
-        conn.execute("SELECT id FROM source_document WHERE id=%s FOR UPDATE", (document_id,))
+        document = conn.execute("SELECT * FROM source_document WHERE id=%s FOR UPDATE",
+                                (document_id,)).fetchone()
+        if not document:
+            raise HTTPException(404, "Document not found")
         if body.decision == "approve":
+            if document["doc_type"] == "voice_memo":
+                if principal.name == document["uploaded_by"]:
+                    raise HTTPException(409, "A different reviewer must verify this voice memo")
+                if not body.voice_audio_verified:
+                    raise HTTPException(422, "Listen to the audio and explicitly verify the transcript")
+                memo = conn.execute(
+                    "SELECT audio_retention_until,audio_purged_at FROM voice_memo WHERE document_id=%s",
+                    (document_id,),
+                ).fetchone()
+                if (not memo or memo["audio_purged_at"]
+                        or memo["audio_retention_until"] <= datetime.now(timezone.utc)):
+                    raise HTTPException(409, "Voice audio expired before verification")
             dataset = conn.execute(
                 """SELECT d.kind,d.qualification_status,d.origin_kind,d.authorization_state,d.applicability
                 FROM source_document s

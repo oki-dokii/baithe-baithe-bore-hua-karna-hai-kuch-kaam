@@ -19,6 +19,8 @@ from nwis.operations import router as operations_router
 from nwis.prediction import router as prediction_router
 from nwis.report_facts import router as report_facts_router
 from nwis.real_ml_approval import router as real_ml_approval_router
+from nwis.exploration import router as exploration_router
+from nwis.pressure_window import router as pressure_window_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
 app.include_router(ingestion_router)
@@ -27,6 +29,8 @@ app.include_router(operations_router)
 app.include_router(prediction_router)
 app.include_router(report_facts_router)
 app.include_router(real_ml_approval_router)
+app.include_router(exploration_router)
+app.include_router(pressure_window_router)
 _fixture_path = Path(__file__).resolve().parents[1] / "specs/fixtures/golden-demo.json"
 if not _fixture_path.is_file():
     _fixture_path = Path(__file__).resolve().parents[2] / "specs/fixtures/golden-demo.json"

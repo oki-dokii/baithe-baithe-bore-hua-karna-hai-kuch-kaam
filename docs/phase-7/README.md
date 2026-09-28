@@ -1,8 +1,8 @@
 # Phase 7 — research-backed extension plan
 
-Recorded 2026-09-27. This is a **plan, not an implementation or performance claim**. Preserve the current standalone decision-support boundary: NWIS cannot issue well-control instructions, infer field readiness from synthetic replay, or treat public Norwegian wells as OIL offsets. See the [implementation backlog](../phase-0/07-backlog.md) and [current demonstration gates](../phase-6/README.md).
+Recorded 2026-09-27; implementation status updated 2026-09-28. The priority table below preserves the research plan and is **not a performance claim**. Preserve the current standalone decision-support boundary: NWIS cannot issue well-control instructions, infer field readiness from synthetic replay, or treat public Norwegian wells as OIL offsets. See the [implementation backlog](../phase-0/07-backlog.md) and [current demonstration gates](../phase-6/README.md).
 
-Work packages 1–2 now have an [initial provenance and decision-chain implementation](provenance-decision-ledger.md). Its remaining limitations and rollout gates are recorded there; later packages below are still planned.
+Work packages 1–2 have an [initial provenance and decision-chain implementation](provenance-decision-ledger.md). The [extra-feature implementation note](extra-features.md) records the newer alert-budget, planning, response-link, voice-memo, depth-track and pressure-record slices. Its limits are important: none constitutes a live eRTMAC feed, a trained risk model, or an operational recommendation.
 
 ## What the external scan actually establishes
 

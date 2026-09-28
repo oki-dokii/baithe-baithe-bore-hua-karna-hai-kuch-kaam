@@ -1,0 +1,18 @@
+# Extra-feature implementation and honest demo boundary
+
+Updated 2026-09-28. These features are decision-support views and review paths, not evidence of field readiness.
+
+| Slice | Shipped behavior | Remaining gate |
+|---|---|---|
+| Alert budget | Per 12-hour replay shift, configurable cap on **low-severity advisory** episodes only; suppression count and reasons appear in the replay UI and append-only decision ledger. Higher-severity and critical classes bypass the cap. | Synthetic replay only. Collect fired/suppressed outcomes on held-out shifts before evaluating coverage; this is **not conformal prediction**. |
+| Location scenario | Click a hypothetical map point, choose radius/formation/depth, and see nearby wells and approved, cited historical hazards. | Not a trajectory model, risk probability, or MW/ECD recommendation. No real offset claim until a dataset is qualified and applicable. |
+| Response network | Read-only grouping of approved cited events, recorded mitigations and recorded effectiveness; unknown remains visible. | Recorded effectiveness is not proof a mitigation caused an outcome. |
+| Voice memo | Browser recording with explicit consent, local audio storage and 30-day purge; transcript becomes a source passage and extracted drafts follow the ordinary independent review path. Reviewers must verify audio, and corrections create a new transcript version. English/Hindi/Assamese are selectable. | Local ASR is **optional**, requires installation of `backend[voice]` and an explicitly configured local model directory (`NWIS_VOICE_MODEL_PATH`). No model is bundled or evaluated on those languages. Typed transcript works without ASR. Test language-specific accuracy and obtain recording permissions before use. |
+| Depth register | Synchronized formation, incident, ROP and torque lanes; missing lanes are explicit. | No unreviewed casing/lithology inferred. Telemetry lane needs qualified historical samples. |
+| Pressure record | API stages cited pore/fracture/mud/ECD bands within an approved formation interval. A different reviewer approves them. Chart shows only approved bands with source pages. | No field pressure data is bundled; chart is empty until values are entered and checked. Values are historical records, **not** a safe mud-weight window. Review must verify quantities, units, datum and source context; the API cannot prove the cited text supports a number. |
+
+To demo the pressure chart without fabricating real data, use an owned synthetic report passage that explicitly states the values. Stage it with `POST /api/v1/pressure-windows` as an engineer and approve with `POST /api/v1/pressure-windows/{id}/review` as a distinct reviewer. Both calls require `Idempotency-Key`. `GET /api/v1/wellbores/{id}/mud-window` then exposes it with a `SYNTHETIC` source badge. The integration test in `backend/tests/test_pressure_window.py` follows this path.
+
+The voice memo capture is under Documents. A reviewer can play retained audio, correct the transcript, and approve or reject extracted drafts. The optional local ASR is a draft source only; its displayed confidence-like diagnostic is not calibrated. After 30 days the background worker deletes stored audio, while the transcript and review history remain for provenance. Review any retention policy with the data owner before ingesting real recordings.
+
+The similarity formula and point-of-use risk disclaimer were already implemented before these slices. Hash-chained decisions and orthogonal provenance fields remain in the existing implementation; their threat-model limits are documented in [provenance-decision-ledger.md](provenance-decision-ledger.md).
