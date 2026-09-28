@@ -54,6 +54,12 @@
 .operations > .section-heading {
   margin-top: 34px;
 }
+.telemetry-dossier { margin-top: 24px; }
+.telemetry-dossier > select { display: block; max-width: 100%; margin: 8px 0 18px; }
+.telemetry-dossier > p, .dossier-bore p { font-size: 12px; line-height: 1.6; }
+.dossier-bore { border-top: 1px solid var(--line); padding: 16px 0; }
+.dossier-bore h3 { font: 18px Georgia, serif; margin: 0 0 8px; }
+.telemetry-dossier details { border-top: 1px solid var(--line); padding-top: 12px; }
 .operation-alert {
   background: var(--paper);
   border: 1px solid var(--line);

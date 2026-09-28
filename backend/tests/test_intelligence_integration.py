@@ -13,10 +13,64 @@ from nwis.main import app
 from nwis.retrieval_eval import Benchmark, evaluate
 from nwis.seed import load_fixture, stable_id
 from nwis.semantic import DIMENSION, MODEL_ID, claim_hash, vector_literal
+from nwis.synthetic_survey_demo import attest
 
 pytestmark = pytest.mark.skipif(
     os.getenv("NWIS_INTEGRATION") != "1", reason="Requires NWIS test database"
 )
+
+
+def test_terminal_discovery_has_no_surface_prefilter_and_excludes_unreviewed():
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {get_settings().viewer_token}"}
+    active = stable_id("wellbore", "SYN-A-MAIN")
+    offset = stable_id("wellbore", "SYN-C-MAIN")
+    target = stable_id("interval", "A-F1")
+    with connection() as conn:
+        load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
+        attest(conn)
+    url = (f"/api/v1/wellbores/{active}/analogues?target_interval_id={target}"
+           "&radius_km=0.5&proximity_basis=terminal_bottomhole")
+    baseline = client.get(url, headers=headers)
+    assert baseline.status_code == 200, baseline.text
+    assert baseline.json()["excluded_unresolved_survey_count"] >= 1
+    assert all(row["id"] != str(offset) for row in baseline.json()["items"])
+    try:
+        with connection() as conn:
+            conn.execute(
+                """UPDATE wellbore SET azimuth_reference='true',
+                   survey_reference_review_state='approved',survey_reference_version=1,
+                   survey_reference_reviewed_by='synthetic-test',
+                   survey_reference_review_reference='owned geometry test'
+                   WHERE id=%s""", (offset,),
+            )
+            # From a surface point about 2 km east of A, a 45-degree westward
+            # synthetic hold ends within 0.5 km. The TVD is consistent with MCM.
+            conn.execute(
+                """UPDATE trajectory_station SET inclination_deg=45,azimuth_deg=270,
+                   tvd_m=md_m*sqrt(0.5) WHERE wellbore_id=%s""", (offset,),
+            )
+        result = client.get(url, headers=headers)
+        assert result.status_code == 200, result.text
+        candidate = next(row for row in result.json()["items"] if row["id"] == str(offset))
+        assert candidate["surface_distance_m"] > 500
+        assert candidate["bottomhole_horizontal_distance_m"] < 500
+        assert result.json()["proximity_basis"] == "terminal_bottomhole"
+        assert "not collision clearance" in result.json()["proximity_notice"]
+        surface = client.get(url.replace("terminal_bottomhole", "surface"), headers=headers)
+        assert all(row["id"] != str(offset) for row in surface.json()["items"])
+    finally:
+        with connection() as conn:
+            conn.execute(
+                """UPDATE wellbore SET azimuth_reference=NULL,
+                   survey_reference_review_state='unreviewed',survey_reference_version=NULL,
+                   survey_reference_reviewed_by=NULL,survey_reference_review_reference=NULL
+                   WHERE id=%s""", (offset,),
+            )
+            conn.execute(
+                """UPDATE trajectory_station SET inclination_deg=NULL,azimuth_deg=NULL,
+                   tvd_m=md_m WHERE wellbore_id=%s""", (offset,),
+            )
 
 
 def test_bottomhole_proximity_fails_closed_then_resolves_with_reviewed_true_north():

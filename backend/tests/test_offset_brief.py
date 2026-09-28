@@ -87,3 +87,20 @@ def test_brief_counts_uncited_and_unresolved_without_disclosing_them():
     assert result["omitted_uncited"] == 1
     assert result["omitted_unresolved"] == 1
     assert result["offsets"][0]["events"] == []
+
+
+def test_terminal_brief_names_geometry_without_safety_claim():
+    comparison = {
+        "active": {"name": "SYN-A"}, "target_interval": {"display_name": "F1"},
+        "radius_km": 1, "proximity_basis": "terminal_bottomhole",
+        "score_formula": "heuristic", "truncated": False,
+        "items": [{"id": "b", "name": "SYN-B", "surface_distance_m": 2000,
+                   "bottomhole_horizontal_distance_m": 300,
+                   "similarity_score": 1, "data_kind": "synthetic",
+                   "origin_kind": "synthetic", "authorization_state": "synthetic",
+                   "applicability": "demo_only", "mappings": []}],
+    }
+    result = build_brief(comparison, lambda _: None)
+    assert result["proximity_basis"] == "terminal_bottomhole"
+    assert result["offsets"][0]["bottomhole_horizontal_distance_m"] == 300
+    assert "not collision clearance" in result["notice"]
