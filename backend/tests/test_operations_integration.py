@@ -157,3 +157,54 @@ def test_replay_alert_lifecycle_idempotency_and_stale_receipt():
             conn.execute(
                 "UPDATE drilling_event SET review_state='rejected' WHERE id=ANY(%s)", (events,)
             )
+
+
+def test_fixed_advisory_budget_records_suppression_without_hiding_critical_alerts():
+    client = TestClient(app)
+    settings = get_settings()
+    engineer = {"Authorization": f"Bearer {settings.engineer_token}",
+                "Idempotency-Key": str(uuid4())}
+    viewer = {"Authorization": f"Bearer {settings.viewer_token}"}
+    events = [uuid4() for _ in range(3)]
+    passage = stable_id("passage", "SYN-DDR-B-001:1")
+    with connection() as conn:
+        load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
+        for event_id, hazard, severity, md in zip(
+            events, ("torque_spike", "torque_spike", "mud_loss"),
+            ("low", "low", "high"), (1930, 1980, 1930),
+        ):
+            conn.execute(
+                """INSERT INTO drilling_event(id,wellbore_id,formation_interval_id,
+                   event_type,start_md_m,end_md_m,severity,description,review_state,source_fields)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'Owned budget test','approved',%s)""",
+                (event_id, stable_id("wellbore", "SYN-B-MAIN"),
+                 stable_id("interval", "B-F1"), hazard, md, md + 10, severity,
+                 Jsonb({"quote": "Mud losses occurred from 1930 to 1940 m MD."})),
+            )
+            conn.execute("INSERT INTO event_passage(event_id,passage_id) VALUES (%s,%s)",
+                         (event_id, passage))
+    try:
+        created = client.post("/api/v1/replay-sessions", json={"advisory_cap": 0},
+                              headers=engineer)
+        assert created.status_code == 201, created.text
+        session_id = created.json()["id"]
+        path = f"/api/v1/replay-sessions/{session_id}"
+        for _ in range(5):
+            snap = client.get(path, headers=viewer).json()
+            response = client.post(path + "/control", json={"action": "step",
+                "expected_version": snap["session"]["revision"]},
+                headers={**engineer, "Idempotency-Key": str(uuid4())})
+            assert response.status_code == 200, response.text
+        data = client.get(path, headers=viewer).json()
+        assert data["alert_budget"]["advisory_cap"] == 0
+        assert data["alert_budget"]["suppressed_count"] == 2
+        assert all(item["reason"] == "fixed_advisory_cap_reached"
+                   for item in data["alert_budget"]["suppressed"])
+        assert any(alert["hazard_type"] == "mud_loss" for alert in data["alerts"])
+        assert not any(alert["hazard_type"] == "torque_spike" for alert in data["alerts"])
+        with connection() as conn:
+            assert verify(conn)["ok"]
+    finally:
+        with connection() as conn:
+            conn.execute("UPDATE drilling_event SET review_state='rejected' WHERE id=ANY(%s)",
+                         (events,))

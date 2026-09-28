@@ -1,0 +1,20 @@
+.voice-memo-panel { margin: 26px 0; padding: 25px; border: 1px solid var(--line); background: var(--paper); }
+.voice-memo-panel h2 { font: 400 31px Georgia, serif; letter-spacing: -.03em; margin: 6px 0 10px; }
+.voice-memo-panel > p { max-width: 760px; font-size: 12px; line-height: 1.7; }
+.voice-memo-panel form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: end; margin-top: 22px; }
+.voice-memo-panel form > label { display: grid; gap: 7px; font-size: 11px; }
+.voice-memo-panel select { width: 100%; }
+.voice-memo-panel .voice-consent { display: flex; align-items: center; grid-column: 1/-1; gap: 9px; }
+.voice-actions { grid-column: 1/-1; display: flex; align-items: center; gap: 10px; }
+.voice-actions span { font: 11px monospace; color: var(--muted); }
+.voice-memo-panel audio { grid-column: 1/-1; max-width: 100%; }
+.voice-memo-panel .voice-transcript { grid-column: 1/-1; }
+.voice-memo-panel textarea { width: 100%; resize: vertical; }
+.voice-memo-panel .footnote, .voice-memo-panel .error { grid-column: 1/-1; }
+.voice-memo-panel form > button { justify-self: start; }
+@media (max-width: 650px) { .voice-memo-panel form { grid-template-columns: 1fr; } }
+.voice-source-note { border-top: 1px solid var(--line); padding: 15px 20px; font-size: 12px; }
+.voice-source-note audio { max-width: 100%; }
+.voice-correction { display: grid; gap: 8px; margin-top: 15px; }
+.voice-correction textarea { width: 100%; resize: vertical; }
+.voice-correction button { justify-self: start; }

@@ -42,6 +42,20 @@ type Snapshot = {
   telemetry: { md_m: number; sequence: number; received_at: string } | null;
   stale: boolean;
   alerts: Alert[];
+  alert_budget: {
+    kind: string;
+    shift_hours: number;
+    shift_number: number;
+    advisory_cap: number;
+    issued_advisories: number;
+    suppressed_count: number;
+    safety_critical_bypass: boolean;
+    notice: string;
+    suppressed: {
+      id: string; event_id: string; hazard_type: string; mapped_start_md_m: number;
+      reason: string; source_well: string; filename: string; page_number: number;
+    }[];
+  };
   risk_reason: string;
   steps_total: number;
   replay_worker_ready: boolean;
@@ -282,6 +296,7 @@ export default function Operations({ token }: { token: string }) {
     return () => clearInterval(timer);
   }, []);
   const [speed, setSpeed] = useState("1");
+  const [advisoryCap, setAdvisoryCap] = useState("3");
   const canControl = ["engineer", "admin"].includes(role);
   useEffect(() => {
     let active = true;
@@ -387,6 +402,7 @@ export default function Operations({ token }: { token: string }) {
       const next = await api<Session>(token, "/replay-sessions", {
         scenario_id: "golden-mud-loss-v1",
         speed: Number(speed),
+        advisory_cap: Number(advisoryCap),
       });
       setSelected(next.id);
       setData(null);
@@ -468,6 +484,12 @@ export default function Operations({ token }: { token: string }) {
                 <option value="0.1">0.1× · 20 seconds / step</option>
                 <option value="1">1× · 2 seconds / step</option>
                 <option value="2">2× · 1 second / step</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="advisory-cap">Advisory cap / 12-hour replay shift</label>
+              <select id="advisory-cap" value={advisoryCap} onChange={(e) => setAdvisoryCap(e.target.value)}>
+                {[0, 1, 2, 3, 5].map((number) => <option value={number} key={number}>{number} low-priority advisories</option>)}
               </select>
             </div>
             <button disabled={busy || offline} onClick={create}>
@@ -578,6 +600,13 @@ export default function Operations({ token }: { token: string }) {
               {data.alerts.length} episodes · acknowledgment ≠ resolution
             </span>
           </div>
+          <details className="budget-digest" open={data.alert_budget.suppressed_count > 0}>
+            <summary>Fixed alert budget · {data.alert_budget.issued_advisories}/{data.alert_budget.advisory_cap} advisories shown · {data.alert_budget.suppressed_count} suppressed</summary>
+            <p className="footnote">{data.alert_budget.notice} This applies only to explicitly low-severity, non-well-control advisories in the synthetic replay; safety-critical episodes bypass the cap. The 12-hour replay shift is a test policy, not an OIL shift schedule.</p>
+            {data.alert_budget.suppressed.map((item) => <p key={item.id}>
+              {human(item.hazard_type)} · {item.source_well} · mapped {Number(item.mapped_start_md_m).toFixed(0)} m MD · suppressed because the fixed cap was reached. Source: {item.filename}, page {item.page_number}. Event {item.event_id.slice(0, 8)}.
+            </p>)}
+          </details>
           {data.alerts.length ? (
             data.alerts.map((a) => (
               <AlertReview

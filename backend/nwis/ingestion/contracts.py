@@ -80,6 +80,7 @@ class ReviewRequest(BaseModel):
     rationale: str = Field(min_length=3, max_length=2000)
     fields: Candidate | None = None
     acknowledge_issues: bool = False
+    voice_audio_verified: bool = False
     onset: OnsetReview = Field(default_factory=lambda: OnsetReview(basis="unspecified"))
 
     @model_validator(mode="after")

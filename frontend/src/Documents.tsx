@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import ReportFacts from "./ReportFacts";
+import VoiceMemo from "./VoiceMemo";
 
 type Fields = {
   event_type: string;
@@ -31,10 +32,14 @@ type Page = {
   ocr_applied: boolean;
   ocr_confidence: number | null;
   has_preview: boolean;
+  transcription_confidence: number | null;
+  transcription_confidence_kind: string | null;
+  transcription_language: string | null;
 };
 type Doc = {
   id: string;
   filename: string;
+  doc_type: string;
   ingest_status: string;
   page_count: number | null;
   kind: string;
@@ -63,7 +68,7 @@ type Option = {
   name: string;
   kind: string;
 };
-type Identity = { role: string; extraction_provider: string; document_max_pages: number };
+type Identity = { role: string; extraction_provider: string; document_max_pages: number; voice_local_asr_available: boolean };
 const human = (value?: string) => (value ?? "unclassified").replaceAll("_", " ");
 async function api<T>(
   token: string,
@@ -90,6 +95,7 @@ function Review({
   canReview,
   approvalBlocked,
   qualificationStatus,
+  voiceMemo,
 }: {
   candidate: Candidate;
   token: string;
@@ -98,10 +104,12 @@ function Review({
   canReview: boolean;
   approvalBlocked: boolean;
   qualificationStatus: string;
+  voiceMemo: boolean;
 }) {
   const [fields, setFields] = useState(candidate.current_fields);
   const [rationale, setRationale] = useState("");
   const [acknowledge, setAcknowledge] = useState(false);
+  const [voiceVerified, setVoiceVerified] = useState(false);
   const [onsetBasis, setOnsetBasis] = useState("unspecified");
   const [onsetEarliest, setOnsetEarliest] = useState("");
   const [onsetLatest, setOnsetLatest] = useState("");
@@ -139,6 +147,7 @@ function Review({
           rationale,
           fields,
           acknowledge_issues: acknowledge,
+          voice_audio_verified: voiceVerified,
           onset: {
             basis: onsetBasis,
             earliest: onsetBasis === "unspecified" ? null : onsetEarliest || null,
@@ -368,6 +377,10 @@ function Review({
               I verified the source and acknowledge unresolved quality issues,
               including those introduced by my edits.
             </label>
+            {voiceMemo && <label className="check">
+              <input type="checkbox" checked={voiceVerified} onChange={(e) => setVoiceVerified(e.target.checked)} />
+              I listened to the retained audio and verified this transcript against it. I am not the uploader.
+            </label>}
             <p className="footnote">
               Approval records a historical claim, not an operational
               recommendation.
@@ -414,6 +427,9 @@ export default function Documents({ token }: { token: string }) {
   const [candidateId, setCandidateId] = useState("");
   const [pageNumber, setPageNumber] = useState(1);
   const [image, setImage] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [correctedTranscript, setCorrectedTranscript] = useState("");
+  const [correctionRationale, setCorrectionRationale] = useState("");
   const [showImage, setShowImage] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -483,6 +499,7 @@ export default function Documents({ token }: { token: string }) {
   }, [candidate?.id]);
   const page =
     detail?.pages.find((p) => p.page_number === pageNumber) ?? detail?.pages[0];
+  useEffect(() => { setCorrectedTranscript(page?.raw_text ?? ""); }, [detail?.id, page?.id]);
   useEffect(() => {
     let active = true;
     let url = "";
@@ -510,6 +527,17 @@ export default function Documents({ token }: { token: string }) {
       if (url) URL.revokeObjectURL(url);
     };
   }, [page?.id, page?.has_preview, detail?.id, token]);
+  useEffect(() => {
+    let active = true;
+    let url = "";
+    setAudioUrl("");
+    if (detail?.doc_type === "voice_memo")
+      fetch(`/api/v1/documents/${detail.id}/audio`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((response) => response.ok ? response.blob() : null)
+        .then((blob) => { if (blob && active) { url = URL.createObjectURL(blob); setAudioUrl(url); } });
+    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+  }, [detail?.id, detail?.doc_type, token]);
   async function upload(event: FormEvent) {
     event.preventDefault();
     if (!file) return;
@@ -568,6 +596,24 @@ export default function Documents({ token }: { token: string }) {
     } finally {
       setBusy(false);
     }
+  }
+  async function saveTranscriptCorrection(event: FormEvent) {
+    event.preventDefault();
+    if (!detail || correctionRationale.trim().length < 3) {
+      setError("Explain why the transcript needs correction."); return;
+    }
+    setBusy(true); setError("");
+    try {
+      await api(token, `/voice-memos/${detail.id}/transcript`, {
+        method: "POST", headers: { "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ expected_review_version: detail.review_version,
+          text: correctedTranscript, rationale: correctionRationale }),
+      });
+      setCorrectionRationale(""); setCandidateId("");
+      setRevision((value) => value + 1);
+      setNotice("A new transcript version was created. Earlier drafts were rejected; review the new evidence.");
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   async function addCandidate(event: FormEvent) {
     event.preventDefault();
@@ -698,6 +744,10 @@ export default function Documents({ token }: { token: string }) {
           </button>
         </form>
       )}
+      {canUpload && <VoiceMemo token={token} options={options}
+        asrAvailable={Boolean(identity?.voice_local_asr_available)}
+        onSaved={(id) => { setSelected(id); setDetail(null); setRevision((value) => value + 1);
+          setNotice("Voice memo received. The transcript will enter the same evidence-review queue."); }} />}
       <div className="review-layout">
         <aside className="report-index">
           <h2>
@@ -722,6 +772,7 @@ export default function Documents({ token }: { token: string }) {
                 </span>
                 <strong>{doc.filename}</strong>
                 <small>
+                  {doc.doc_type === "voice_memo" ? "VOICE MEMO · " : ""}
                   {doc.origin_kind
                     ? `${human(doc.origin_kind)} · ${human(doc.applicability)}`
                     : doc.kind} · {doc.page_count ?? "—"} pages
@@ -794,6 +845,17 @@ export default function Documents({ token }: { token: string }) {
                   </div>
                 )}
               </div>
+              {detail.doc_type === "voice_memo" && <div className="voice-source-note">
+                <p className="footnote">Voice transcript is untrusted until a reviewer checks the audio and approves a cited claim. Audio access is limited to the uploader and reviewers; it expires after 30 days.</p>
+                {audioUrl ? <audio controls src={audioUrl} aria-label="Original voice memo" /> : <p>Audio unavailable or access restricted.</p>}
+                {audioUrl && canUpload && page && <form onSubmit={saveTranscriptCorrection} className="voice-correction">
+                  <label htmlFor="corrected-voice-text">Correct transcript before claim review</label>
+                  <textarea id="corrected-voice-text" rows={5} value={correctedTranscript} onChange={(e) => setCorrectedTranscript(e.target.value)} />
+                  <label htmlFor="voice-correction-reason">Correction rationale</label>
+                  <input id="voice-correction-reason" value={correctionRationale} onChange={(e) => setCorrectionRationale(e.target.value)} />
+                  <button disabled={busy || correctedTranscript.trim() === page.raw_text.trim()}>Save new transcript version</button>
+                </form>}
+              </div>}
               {page ? (
                 <div className="source-sheet">
                   {page.ocr_applied && (
@@ -805,6 +867,9 @@ export default function Documents({ token }: { token: string }) {
                       · verify against image
                     </p>
                   )}
+                  {detail.doc_type === "voice_memo" && <p className="ocr-note">
+                    {human(page.transcription_language ?? "language unknown")} voice transcript · {page.transcription_confidence == null ? "confidence unavailable (typed or corrected)" : `${Math.round(page.transcription_confidence * 100)}% uncalibrated token likelihood`} · verify against audio
+                  </p>}
                   {showImage && image ? (
                     <img
                       className="page-image"
@@ -908,6 +973,7 @@ export default function Documents({ token }: { token: string }) {
                 approvalBlocked={!(detail.approval_allowed ??
                   (detail.qualification_status !== "staged_unreviewed"))}
                 qualificationStatus={detail.qualification_status}
+                voiceMemo={detail.doc_type === "voice_memo"}
                 onSaved={() => {
                   setRevision((r) => r + 1);
                   setNotice("Review decision recorded with your rationale.");

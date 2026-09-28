@@ -12,11 +12,13 @@ from nwis.ingestion.extract import (
     RULES_VERSION,
     SCHEMA_VERSION,
     extract_candidates,
+    local_candidates,
     quote_is_supported,
 )
 from nwis.ingestion.normalize import normalization_context, normalize
-from nwis.ingestion.pages import read_pages
+from nwis.ingestion.pages import Page, read_pages
 from nwis.ingestion.storage import path_for
+from nwis.voice import transcribe_local, typed_transcript
 
 
 def tick() -> bool:
@@ -58,25 +60,27 @@ def tick() -> bool:
             "UPDATE source_document SET ingest_status='processing' WHERE id=%s",
             (job["document_id"],),
         )
-        conn.execute(
-            """INSERT INTO extraction_run(id,document_id,extractor_version,schema_version,status,
-            provider,model_id,prompt_version) VALUES(%s,%s,%s,%s,'processing',%s,%s,%s)""",
-            (
-                run,
-                job["document_id"],
-                RULES_VERSION if settings.extraction_provider == "local_rules" else "structured-v1",
-                SCHEMA_VERSION,
-                settings.extraction_provider,
-                settings.llm_model or None,
-                PROMPT_VERSION,
-            ),
-        )
         document = conn.execute(
             """SELECT d.*, ds.kind, b.wellbore_id FROM source_document d
             JOIN dataset ds ON ds.id=d.dataset_id JOIN document_wellbore b ON b.document_id=d.id
             WHERE d.id=%s""",
             (job["document_id"],),
         ).fetchone()
+        conn.execute(
+            """INSERT INTO extraction_run(id,document_id,extractor_version,schema_version,status,
+            provider,model_id,prompt_version) VALUES(%s,%s,%s,%s,'processing',%s,%s,%s)""",
+            (
+                run,
+                job["document_id"],
+                RULES_VERSION if document["doc_type"] == "voice_memo"
+                or settings.extraction_provider == "local_rules" else "structured-v1",
+                SCHEMA_VERSION,
+                "local_rules" if document["doc_type"] == "voice_memo"
+                else settings.extraction_provider,
+                settings.llm_model or None,
+                PROMPT_VERSION,
+            ),
+        )
         context = normalization_context(conn, document["wellbore_id"])
 
     def heartbeat(*_args):
@@ -94,13 +98,32 @@ def tick() -> bool:
                 raise IngestionFailure("lease_lost", "Another worker owns this job")
 
     try:
-        pages = read_pages(
-            path_for(document["storage_key"]), document["mime_type"], str(run), heartbeat
-        )
+        if document["doc_type"] == "voice_memo":
+            with connection() as conn:
+                memo = conn.execute(
+                    "SELECT language,transcription_mode,typed_transcript FROM voice_memo WHERE document_id=%s",
+                    (document["id"],),
+                ).fetchone()
+            if not memo:
+                raise IngestionFailure("voice_metadata_missing", "Voice-memo provenance is missing")
+            transcript = (
+                typed_transcript(memo["typed_transcript"], memo["language"])
+                if memo["transcription_mode"] == "typed"
+                else transcribe_local(path_for(document["storage_key"]), memo["language"])
+            )
+            pages = [Page(1, transcript.text,
+                          transcription_confidence=transcript.confidence,
+                          transcription_confidence_kind=transcript.confidence_kind,
+                          transcription_language=transcript.language)]
+        else:
+            pages = read_pages(
+                path_for(document["storage_key"]), document["mime_type"], str(run), heartbeat
+            )
         extracted = []
         for page in pages:
             heartbeat()
-            candidates = extract_candidates(page.text, document["kind"])
+            candidates = (local_candidates(page.text) if document["doc_type"] == "voice_memo"
+                          else extract_candidates(page.text, document["kind"]))
             if len(candidates) > 100:
                 raise IngestionFailure(
                     "too_many_candidates", "Page exceeds the 100-candidate limit"
@@ -127,8 +150,9 @@ def tick() -> bool:
                 passage = uuid4()
                 conn.execute(
                     """INSERT INTO extracted_passage(id,document_id,page_number,raw_text,ocr_applied,
-                    ocr_confidence,text_version,preview_key,word_boxes,extraction_run_id)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    ocr_confidence,text_version,preview_key,word_boxes,extraction_run_id,
+                    transcription_confidence,transcription_confidence_kind,transcription_language)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
                         passage,
                         document["id"],
@@ -140,12 +164,17 @@ def tick() -> bool:
                         page.preview_key,
                         Jsonb(page.word_boxes or []),
                         run,
+                        page.transcription_confidence,
+                        page.transcription_confidence_kind,
+                        page.transcription_language,
                     ),
                 )
                 for candidate in candidates:
                     normalized, issues = normalize(candidate, context)
                     if page.ocr_applied:
                         issues.append("ocr_source_verify")
+                    if document["doc_type"] == "voice_memo":
+                        issues.append("voice_transcript_verify")
                     fields = Jsonb(candidate.model_dump())
                     conn.execute(
                         """INSERT INTO document_event_draft(id,document_id,run_id,passage_id,

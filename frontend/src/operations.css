@@ -122,3 +122,12 @@
     padding: 18px;
   }
 }
+.budget-digest {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 14px 20px;
+  margin: 14px 0 22px;
+  font-size: 12px;
+}
+.budget-digest summary { cursor: pointer; font-weight: 600; }
+.budget-digest p { line-height: 1.6; }
