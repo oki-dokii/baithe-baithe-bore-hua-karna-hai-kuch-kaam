@@ -43,6 +43,7 @@ def build_brief(comparison, get_case):
         offsets.append({
             "wellbore_id": str(candidate["id"]), "name": candidate["name"],
             "surface_distance_m": candidate["surface_distance_m"],
+            "bottomhole_horizontal_distance_m": candidate.get("bottomhole_horizontal_distance_m"),
             "similarity_score": candidate["similarity_score"],
             "data_kind": candidate["data_kind"],
             "origin_kind": candidate["origin_kind"],
@@ -54,11 +55,16 @@ def build_brief(comparison, get_case):
         "active_name": comparison["active"]["name"],
         "target_formation": comparison["target_interval"]["display_name"],
         "radius_km": comparison["radius_km"],
+        "proximity_basis": comparison.get("proximity_basis", "surface"),
         "score_formula": comparison["score_formula"],
         "offsets": offsets,
         "omitted_uncited": omitted_uncited,
         "omitted_unresolved": omitted_unresolved,
         "truncated": comparison["truncated"] or len(comparison["items"]) > MAX_WELLS
                      or event_limit_reached,
-        "notice": "Historical, reviewed and cited observations only. Formation-relative mapping and similarity are heuristics, not risk probabilities or operating recommendations. Surface radius is not bottom-hole search.",
+        "notice": "Historical, reviewed and cited observations only. Formation-relative mapping and similarity are heuristics, not risk probabilities or operating recommendations. " + (
+            "Reviewed true-north terminal positions only; endpoint distance is not collision clearance or a safety assessment."
+            if comparison.get("proximity_basis") == "terminal_bottomhole"
+            else "Surface radius is not bottom-hole search."
+        ),
     }

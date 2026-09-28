@@ -1,5 +1,6 @@
 import hashlib
 import os
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from nwis.drilling_parameters import (
     DrillingScreenError, HistoricalBatch, eligible_anchors, stage_batch,
 )
 from nwis.telemetry_screen import screen_batch
+from nwis.telemetry_dossier import quality_dossier
 
 NOW = datetime(2025, 1, 1, tzinfo=timezone.utc)
 RAW = b"owned test export only\n"
@@ -121,7 +123,7 @@ def test_gap_and_incomplete_wellbore_stop_entire_export():
 
 
 @pytest.mark.skipif(os.getenv("NWIS_INTEGRATION") != "1", reason="Needs initialized NWIS test DB")
-def test_staging_revision_and_fail_closed_qualification():
+def test_staging_revision_and_fail_closed_qualification(monkeypatch):
     dataset_id, well_id, bore_id, ref_id = (uuid4() for _ in range(4))
     with connection() as conn:
         conn.execute(
@@ -188,6 +190,14 @@ def test_staging_revision_and_fail_closed_qualification():
                             depth_reference_id=ref_id)
         corrected = batch(dataset_id, bore_id, samples=[correction])
         assert stage_batch(conn, corrected, RAW)["staged_rows"] == 1
+        monkeypatch.setattr("nwis.telemetry_dossier.connection", lambda: nullcontext(conn))
+        dossier = quality_dossier(result["source_id"], None)
+        assert dossier["screen"]["decision"] == "screen_passed_needs_review"
+        assert dossier["record_counts"]["stored_revisions"] == 41
+        assert dossier["record_counts"]["distinct_records"] == 40
+        assert dossier["source"]["qualification_state"] == "staged"
+        assert "permission_reference" not in dossier["source"]
+        assert "raw_values" not in dossier["screen"]
         with pytest.raises(ValueError, match="sample_revision_changed"):
             stage_batch(conn, batch(dataset_id, bore_id,
                                    samples=[sample(bore_id, rop_m_per_h=99)]), RAW)

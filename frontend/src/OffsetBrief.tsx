@@ -2,6 +2,7 @@ export type OffsetBriefData = {
   active_name: string;
   target_formation: string;
   radius_km: number;
+  proximity_basis: "surface" | "terminal_bottomhole";
   score_formula: string;
   notice: string;
   truncated: boolean;
@@ -11,6 +12,7 @@ export type OffsetBriefData = {
     wellbore_id: string;
     name: string;
     surface_distance_m: number;
+    bottomhole_horizontal_distance_m: number | null;
     similarity_score: number;
     data_kind: string;
     origin_kind: string;
@@ -35,10 +37,10 @@ export default function OffsetBrief({ data }: { data: OffsetBriefData }) {
   return <article className="offset-brief" aria-label="Printable offset brief">
     <p className="eyebrow">NWIS / FIELD NOTE</p>
     <h2>Offset evidence brief</h2>
-    <p className="brief-deck">{data.active_name} · {data.target_formation} · {data.radius_km} km surface search</p>
+    <p className="brief-deck">{data.active_name} · {data.target_formation} · {data.radius_km} km {data.proximity_basis === "surface" ? "surface" : "reviewed terminal-position"} search</p>
     <p className="brief-guard">{data.notice}</p>
     {data.offsets.map((offset, index) => <section key={offset.wellbore_id} className="brief-offset">
-      <h3><span>{String(index + 1).padStart(2, "0")}</span> {offset.name} <small>{(offset.surface_distance_m / 1000).toFixed(2)} km surface</small></h3>
+      <h3><span>{String(index + 1).padStart(2, "0")}</span> {offset.name} <small>{(offset.surface_distance_m / 1000).toFixed(2)} km surface{offset.bottomhole_horizontal_distance_m == null ? "" : ` · ${(offset.bottomhole_horizontal_distance_m / 1000).toFixed(2)} km terminal`}</small></h3>
       <p className="brief-meta">{label(offset.data_kind)} · {label(offset.origin_kind)} · {label(offset.authorization_state)} · {label(offset.applicability)} · similarity {(offset.similarity_score * 100).toFixed(0)}/100, not risk</p>
       {offset.events.length ? offset.events.map((event) => <div key={event.event_id} className="brief-event">
         <strong>{label(event.event_type)}</strong> · historical {md(event.source_start_md_m)} → mapped {md(event.mapped_start_md_m)}

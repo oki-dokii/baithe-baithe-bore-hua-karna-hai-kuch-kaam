@@ -36,6 +36,7 @@ type Mapping = {
 };
 type Analogue = Well & {
   surface_distance_m: number;
+  bottomhole_horizontal_distance_m?: number;
   similarity_score: number;
   components: {
     same_reviewed_formation: number;
@@ -48,6 +49,9 @@ type Analogue = Well & {
 type Comparison = {
   items: Analogue[];
   target_interval: Interval;
+  proximity_basis: "surface" | "terminal_bottomhole";
+  proximity_notice: string;
+  excluded_unresolved_survey_count: number;
   score_formula: string;
   truncated: boolean;
 };
@@ -128,6 +132,7 @@ function WellMap({
   active,
   candidates,
   radius,
+  proximityBasis,
   onSelect,
   onPlan,
   planningPoint,
@@ -135,6 +140,7 @@ function WellMap({
   active: Well;
   candidates: Analogue[];
   radius: number;
+  proximityBasis: "surface" | "terminal_bottomhole";
   onSelect: (id: string) => void;
   onPlan: (point: PlanningPoint) => void;
   planningPoint: PlanningPoint | null;
@@ -156,44 +162,43 @@ function WellMap({
     if (planningPoint) L.circleMarker([planningPoint.latitude, planningPoint.longitude], {
       radius: 8, color: "#a05d3c", fillColor: "#fffefb", weight: 3, fillOpacity: 1,
     }).addTo(map).bindTooltip("Hypothetical planning point");
-    const ring = L.circle([active.latitude, active.longitude], {
-      radius: radius * 1000,
-      color: "#78896d",
-      weight: 1,
-      dashArray: "4 6",
-      fillColor: "#e1e8d9",
-      fillOpacity: 0.45,
-    }).addTo(map);
-    map.fitBounds(ring.getBounds(), { padding: [35, 35] });
-    const bounds = ring.getBounds().pad(0.5);
+    const bounds = proximityBasis === "surface"
+      ? L.circle([active.latitude, active.longitude], {
+          radius: radius * 1000, color: "#78896d", weight: 1,
+          dashArray: "4 6", fillColor: "#e1e8d9", fillOpacity: 0.45,
+        }).addTo(map).getBounds()
+      : L.latLngBounds([active, ...candidates].map((well) => [well.latitude, well.longitude]));
+    if (bounds.isValid() && (proximityBasis === "surface" || candidates.length))
+      map.fitBounds(bounds.pad(0.15), { padding: [35, 35], maxZoom: 13 });
+    const gridBounds = bounds.pad(0.5);
     const step = Math.max(
       0.002,
       Math.pow(
         10,
-        Math.floor(Math.log10((bounds.getNorth() - bounds.getSouth()) / 5)),
+        Math.floor(Math.log10(Math.max(0.01, gridBounds.getNorth() - gridBounds.getSouth()) / 5)),
       ),
     );
     for (
-      let lat = Math.floor(bounds.getSouth() / step) * step;
-      lat <= bounds.getNorth();
+      let lat = Math.floor(gridBounds.getSouth() / step) * step;
+      lat <= gridBounds.getNorth();
       lat += step
     )
       L.polyline(
         [
-          [lat, bounds.getWest()],
-          [lat, bounds.getEast()],
+          [lat, gridBounds.getWest()],
+          [lat, gridBounds.getEast()],
         ],
         { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
       ).addTo(map);
     for (
-      let lon = Math.floor(bounds.getWest() / step) * step;
-      lon <= bounds.getEast();
+      let lon = Math.floor(gridBounds.getWest() / step) * step;
+      lon <= gridBounds.getEast();
       lon += step
     )
       L.polyline(
         [
-          [bounds.getSouth(), lon],
-          [bounds.getNorth(), lon],
+          [gridBounds.getSouth(), lon],
+          [gridBounds.getNorth(), lon],
         ],
         { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
       ).addTo(map);
@@ -225,7 +230,7 @@ function WellMap({
       observer.disconnect();
       map.remove();
     };
-  }, [active, candidates, radius, planningPoint]);
+  }, [active, candidates, radius, proximityBasis, planningPoint]);
   return (
     <div
       className="well-map"
@@ -242,6 +247,7 @@ export default function Intelligence({ token }: { token: string }) {
   const [intervals, setIntervals] = useState<Interval[]>([]);
   const [intervalId, setIntervalId] = useState("");
   const [radius, setRadius] = useState(5);
+  const [proximityBasis, setProximityBasis] = useState<"surface" | "terminal_bottomhole">("surface");
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [bottomhole, setBottomhole] = useState<BottomholeProximity | null>(null);
   const [brief, setBrief] = useState<OffsetBriefData | null>(null);
@@ -332,7 +338,7 @@ export default function Intelligence({ token }: { token: string }) {
       () =>
         request<Comparison>(
           token,
-          `/wellbores/${activeId}/analogues?target_interval_id=${intervalId}&radius_km=${radius}`,
+          `/wellbores/${activeId}/analogues?target_interval_id=${intervalId}&radius_km=${radius}&proximity_basis=${proximityBasis}`,
         )
           .then((data) => {
             if (live) {
@@ -348,7 +354,7 @@ export default function Intelligence({ token }: { token: string }) {
       live = false;
       clearTimeout(timer);
     };
-  }, [token, activeId, intervalId, radius]);
+  }, [token, activeId, intervalId, radius, proximityBasis]);
   useEffect(() => {
     let live = true;
     setBottomhole(null);
@@ -437,7 +443,7 @@ export default function Intelligence({ token }: { token: string }) {
     setBrief(null);
     try {
       const data = await request<OffsetBriefData>(token,
-        `/wellbores/${activeId}/offset-brief?target_interval_id=${intervalId}&radius_km=${radius}`);
+        `/wellbores/${activeId}/offset-brief?target_interval_id=${intervalId}&radius_km=${radius}&proximity_basis=${proximityBasis}`);
       setBrief(data);
     } catch (e) {
       setError((e as Error).message);
@@ -496,7 +502,15 @@ export default function Intelligence({ token }: { token: string }) {
           </select>
         </div>
         <div>
-          <label htmlFor="atlas-radius">Surface radius · {radius} km</label>
+          <label htmlFor="atlas-basis">Proximity basis</label>
+          <select id="atlas-basis" value={proximityBasis}
+            onChange={(e) => setProximityBasis(e.target.value as "surface" | "terminal_bottomhole")}>
+            <option value="surface">Surface wellhead</option>
+            <option value="terminal_bottomhole">Reviewed terminal position</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="atlas-radius">{proximityBasis === "surface" ? "Surface" : "Terminal"} radius · {radius} km</label>
           <input
             id="atlas-radius"
             type="range"
@@ -519,6 +533,10 @@ export default function Intelligence({ token }: { token: string }) {
       )}
       {active && comparison && (
         <>
+          <p className="notice">{comparison.proximity_notice} Map markers show surface wellheads.
+            {comparison.excluded_unresolved_survey_count > 0 &&
+              ` ${comparison.excluded_unresolved_survey_count} candidate(s) excluded for unresolved survey geometry.`}
+          </p>
           <div className="brief-actions">
             <button type="button" onClick={prepareBrief} disabled={briefLoading}>
               {briefLoading ? "Preparing cited brief…" : "Prepare one-page offset brief"}
@@ -532,6 +550,7 @@ export default function Intelligence({ token }: { token: string }) {
                 active={active}
                 candidates={comparison.items}
                 radius={radius}
+                proximityBasis={proximityBasis}
                 onSelect={id => { setSelected(id); setRecord(null); setSource(null); caseSequence.current++; }}
                 onPlan={setPlanningPoint}
                 planningPoint={planningPoint}
@@ -548,7 +567,7 @@ export default function Intelligence({ token }: { token: string }) {
               <div className="panel-heading">
                 <h2>Offset wells</h2>
                 <span className="mono">
-                  {comparison.items.length} IN RADIUS
+                  {comparison.items.length} IN {proximityBasis === "surface" ? "SURFACE" : "TERMINAL"} RADIUS
                 </span>
               </div>
               {comparison.items.length ? (
@@ -564,7 +583,7 @@ export default function Intelligence({ token }: { token: string }) {
                     className={`analogue-row ${selected === w.id ? "selected" : ""}`}
                   >
                     <strong>{w.name}</strong>
-                    <span>{(w.surface_distance_m / 1000).toFixed(2)} km</span>
+                    <span>{((proximityBasis === "terminal_bottomhole" ? w.bottomhole_horizontal_distance_m : w.surface_distance_m)! / 1000).toFixed(2)} km</span>
                     <small>
                       Similarity {(w.similarity_score * 100).toFixed(0)} / 100 ·
                       not risk
@@ -578,14 +597,14 @@ export default function Intelligence({ token }: { token: string }) {
                 ))
               ) : (
                 <p className="index-empty">
-                  No offset wells within this radius.
+                  No eligible offset wells within this radius.
                 </p>
               )}
             </aside>
           </div>
           {comparison.truncated && (
             <p className="notice">
-              Showing the nearest 100 wellbores only. Narrow the radius.
+              Showing the nearest 100 eligible wellbores only. Narrow the radius.
             </p>
           )}
           <PlanningPanel token={token} datasetId={active.dataset_id} point={planningPoint}
@@ -606,7 +625,7 @@ export default function Intelligence({ token }: { token: string }) {
               </div>
               <p className="footnote">{comparison.score_formula}</p>
               <p className="footnote">
-                Surface-selected pair · bottom-hole horizontal separation: {bottomhole?.status === "resolved"
+                {proximityBasis === "surface" ? "Surface-selected pair" : "Terminal-position-selected pair"} · bottom-hole horizontal separation: {bottomhole?.status === "resolved"
                   ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
                   : "unavailable"}. {bottomhole?.status === "unresolved"
                   ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `

@@ -169,6 +169,22 @@ def position_profile(identity, stations):
         return {"status": "unresolved", "reason": str(exc)}
 
 
+def terminal_distance_m(conn, left_identity, left, right_identity, right):
+    """Geodesic endpoint distance from reviewed true-north survey offsets."""
+    def projected(identity, position):
+        north, east = position["north_m"], position["east_m"]
+        return (identity["longitude"], identity["latitude"],
+                math.hypot(north, east), math.atan2(east, north))
+
+    return conn.execute(
+        """SELECT ST_Distance(
+             ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s),
+             ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s)
+           ) AS distance_m""",
+        (*projected(left_identity, left), *projected(right_identity, right)),
+    ).fetchone()["distance_m"]
+
+
 @router.get("/intelligence/wellbores")
 def wellbores(_principal=Depends(current_principal)):
     with connection() as conn:
@@ -225,18 +241,9 @@ def bottomhole_proximity(
         }
         if left["status"] != "resolved" or right["status"] != "resolved":
             return result
-        def projected(identity, position):
-            north, east = position["north_m"], position["east_m"]
-            return (identity["longitude"], identity["latitude"],
-                    math.hypot(north, east), math.atan2(east, north))
-
-        result["bottomhole_horizontal_distance_m"] = conn.execute(
-            """SELECT ST_Distance(
-                 ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s),
-                 ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s)
-               ) AS distance_m""",
-            (*projected(active, left), *projected(offset, right)),
-        ).fetchone()["distance_m"]
+        result["bottomhole_horizontal_distance_m"] = terminal_distance_m(
+            conn, active, left, offset, right
+        )
         result["status"] = "resolved"
         return result
 
@@ -246,6 +253,7 @@ def analogues(
     wellbore_id: UUID,
     target_interval_id: UUID,
     radius_km: float = Query(5, ge=0.1, le=100),
+    proximity_basis: Literal["surface", "terminal_bottomhole"] = "surface",
     _principal=Depends(current_principal),
 ):
     with connection() as conn:
@@ -257,19 +265,41 @@ def analogues(
         )
         if not target or target["review_state"] != "approved":
             raise HTTPException(422, "Select a reviewed interval belonging to the active wellbore")
+        target_survey = survey(conn, wellbore_id)
+        active_position = None
+        if proximity_basis == "terminal_bottomhole":
+            active_position = position_profile(active, target_survey)
+            if active_position["status"] != "resolved":
+                raise HTTPException(422, f"Active terminal position unavailable: {active_position['reason']}")
         candidates = conn.execute(
-            """SELECT b.id,w.name,w.id AS well_id,d.kind AS data_kind,
+            """SELECT b.id,b.azimuth_reference,b.survey_reference_review_state,
+            b.survey_reference_version,w.name,w.id AS well_id,d.kind AS data_kind,
             d.origin_kind,d.authorization_state,d.applicability,d.qualification_status,
             ST_X(w.surface_point::geometry) AS longitude,ST_Y(w.surface_point::geometry) AS latitude,
             ST_Distance(w.surface_point,a.surface_point) AS surface_distance_m
             FROM well a JOIN well w ON w.dataset_id=a.dataset_id AND w.id<>a.id
             JOIN wellbore b ON b.well_id=w.id JOIN dataset d ON d.id=w.dataset_id
             WHERE a.id=%s AND w.status<>'benchmark_unlocated'
-              AND ST_DWithin(w.surface_point,a.surface_point,%s)
-            ORDER BY surface_distance_m,b.id LIMIT 101""",
-            (active["well_id"], radius_km * 1000),
+              AND (%s='terminal_bottomhole' OR ST_DWithin(w.surface_point,a.surface_point,%s))
+            ORDER BY surface_distance_m,b.id LIMIT %s""",
+            (active["well_id"], proximity_basis, radius_km * 1000,
+             1001 if proximity_basis == "terminal_bottomhole" else 101),
         ).fetchall()
-        target_survey = survey(conn, wellbore_id)
+        if proximity_basis == "terminal_bottomhole" and len(candidates) > 1000:
+            raise HTTPException(422, "More than 1000 candidate wellbores; terminal search cannot be complete")
+        excluded_unresolved_survey_count = 0
+        if proximity_basis == "terminal_bottomhole":
+            eligible = []
+            for candidate in candidates:
+                profile = position_profile(candidate, survey(conn, candidate["id"]))
+                if profile["status"] != "resolved":
+                    excluded_unresolved_survey_count += 1
+                    continue
+                distance = terminal_distance_m(conn, active, active_position, candidate, profile)
+                if distance <= radius_km * 1000:
+                    eligible.append({**candidate, "bottomhole_horizontal_distance_m": distance})
+            eligible.sort(key=lambda row: (row["bottomhole_horizontal_distance_m"], str(row["id"])))
+            candidates = eligible
         result = []
         for candidate in candidates[:100]:
             intervals = interval_rows(conn, candidate["id"])
@@ -345,11 +375,16 @@ def analogues(
                     else None,
                 }
             )
-        result.sort(key=lambda r: (-r["similarity_score"], r["surface_distance_m"], str(r["id"])))
+        result.sort(key=lambda r: (-r["similarity_score"],
+                                   r.get("bottomhole_horizontal_distance_m", r["surface_distance_m"]),
+                                   str(r["id"])))
         return {
             "active": active,
             "target_interval": target,
             "radius_km": radius_km,
+            "proximity_basis": proximity_basis,
+            "excluded_unresolved_survey_count": excluded_unresolved_survey_count,
+            "proximity_notice": "Reviewed true-north terminal positions only; horizontal endpoint distance is not collision clearance or a safety assessment." if proximity_basis == "terminal_bottomhole" else "Surface wellhead radius; not a terminal-position search.",
             "items": result,
             "truncated": len(candidates) > 100,
             "method": METHOD,
@@ -391,9 +426,10 @@ def offset_brief(
     wellbore_id: UUID,
     target_interval_id: UUID,
     radius_km: float = Query(5, ge=0.1, le=100),
+    proximity_basis: Literal["surface", "terminal_bottomhole"] = "surface",
     _principal=Depends(current_principal),
 ):
-    comparison = analogues(wellbore_id, target_interval_id, radius_km, _principal)
+    comparison = analogues(wellbore_id, target_interval_id, radius_km, proximity_basis, _principal)
     with connection() as conn:
         return build_brief(comparison, lambda event_id: event_case(conn, event_id))
 

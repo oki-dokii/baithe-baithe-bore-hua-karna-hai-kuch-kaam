@@ -1,6 +1,6 @@
 .atlas-controls {
   display: grid;
-  grid-template-columns: 1fr 1.4fr 1fr;
+  grid-template-columns: 1fr 1.4fr 1fr 1fr;
   gap: 28px;
   padding: 20px 0 30px;
   border-top: 1px solid var(--line);

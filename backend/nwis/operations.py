@@ -162,7 +162,7 @@ def advance(conn, session):
         (uuid4(), ACTIVE, session["id"], sequence, now, now, md, md),
     )
     # Each accepted replay step is a newly received sample. GETs never re-evaluate or create alerts.
-    comparison = analogues(ACTIVE, TARGET, 5, None)
+    comparison = analogues(ACTIVE, TARGET, 5, "surface", None)
     if (datetime.now(timezone.utc) - now).total_seconds() > STALE_SECONDS:
         raise HTTPException(
             503, "Evaluation exceeded the sample freshness window; nothing was committed"

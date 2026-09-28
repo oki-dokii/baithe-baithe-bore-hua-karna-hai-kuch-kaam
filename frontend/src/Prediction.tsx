@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import TelemetryDossier from "./TelemetryDossier";
 
 type Readiness = {
   hazard: string;
@@ -118,6 +119,7 @@ export default function Prediction({ token }: { token: string }) {
           </div>
         </>
       )}
+      <TelemetryDossier token={token} />
     </section>
   );
 }
