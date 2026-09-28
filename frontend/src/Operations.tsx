@@ -144,7 +144,9 @@ function AlertReview({
       </div>
       <p className="footnote">
         Historical lookahead · {alert.seen_count} supporting ticks · revision{" "}
-        {alert.revision}. This is not a probability or operating instruction.
+        {alert.revision}. Similar past events indicate a condition to review, not a
+        prediction that this event will occur. Check the cited well, formation,
+        depth datum, and current measurements before deciding any action.
       </p>
       {(alert.evidence_changed || alert.relevance === "review_required") && (
         <p className="error">
@@ -520,6 +522,7 @@ export default function Operations({ token }: { token: string }) {
               <h2>100 m</h2>
               <p>Formation: SYN-F1 · radius: 5 km</p>
               <p>ML risk: unavailable · no model</p>
+              <p className="footnote">No ML probability or drilling recommendation is available.</p>
             </div>
           </div>
           {!data.replay_worker_ready && (
