@@ -8,6 +8,8 @@ Repository: https://github.com/oki-dokii/baithe-baithe-bore-hua-karna-hai-kuch-k
 
 The [research-backed Phase 7 extension plan](docs/phase-7/README.md) records candidate additions, implementation order and the evidence each would need before we claim it works.
 
+For frontend design work, use the [future-state UI/UX blueprint](docs/ui/NWIS_UI_HANDOFF.md). It assumes authorized OIL data, live eRTMAC and validated models for design purposes; it is a target experience, **not the current implementation status**.
+
 ## Specification
 
 Read these in order:
