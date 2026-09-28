@@ -1,5 +1,7 @@
 # First real-source qualification — NOD wellbore 25/10-2 R
 
+2026-09-28 follow-up: the [source-triage disposition](nod-511-disposition-2026-09-28.md) rechecked scanned pages 7, 10, 19 and 20. The later 7,773-ft depth plausibly explains the rounded FactPage value, but no onset/datum was adjudicated; the event remains blocked as the user requested.
+
 Checked 2026-09-26. This is a local public-source trial, separate from the fictional SYN-A/SYN-B fixture. It does not establish applicability to Assam or OIL wells, and it does not provide predictive training labels.
 
 ## Source register

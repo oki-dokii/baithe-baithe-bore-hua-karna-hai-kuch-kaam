@@ -1,5 +1,7 @@
 # Phase 6 — demonstration readiness, partial rehearsal
 
+2026-09-28 update: [current-code rehearsal](rehearsal-2026-09-28.md) passed on a fresh local database; a separate fresh-image Compose rerun was blocked by host disk capacity. The [gate-led pitch](pitch-gated-evidence-2026-09-28.md) distinguishes authentic staged reports from the owned synthetic alert demo. The [NOD-511 triage decision](../phase-2/nod-511-disposition-2026-09-28.md) retains the conflicting depths and blocks onset approval.
+
 Recorded 2026-09-27. This is a software rehearsal and gap register, not a claim of SIH field readiness or model accuracy. The local database already existed; this run did **not** perform a fresh empty-volume Compose setup. No private OIL data were available.
 
 | Gate | Evidence from this run | State |
