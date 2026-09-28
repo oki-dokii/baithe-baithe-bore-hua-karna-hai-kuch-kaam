@@ -220,6 +220,7 @@ def bottomhole_proximity(
             "offset_position": right,
             "bottomhole_horizontal_distance_m": None,
             "method": "minimum_curvature_true_north_v1",
+            "source_scope": "owned_synthetic_demo_only" if active["data_kind"] == offset["data_kind"] == "synthetic" else "reviewed_dataset_pair",
             "notice": "Horizontal endpoint separation only; not an anti-collision, uncertainty, or drilling-safety assessment.",
         }
         if left["status"] != "resolved" or right["status"] != "resolved":

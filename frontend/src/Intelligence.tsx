@@ -53,6 +53,7 @@ type Comparison = {
 };
 type BottomholeProximity = {
   status: "resolved" | "unresolved";
+  source_scope: "owned_synthetic_demo_only" | "reviewed_dataset_pair";
   active_position: { status: string; reason?: string };
   offset_position: { status: string; reason?: string };
   bottomhole_horizontal_distance_m: number | null;
@@ -610,6 +611,7 @@ export default function Intelligence({ token }: { token: string }) {
                   : "unavailable"}. {bottomhole?.status === "unresolved"
                   ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
                   : ""}
+                {bottomhole?.source_scope === "owned_synthetic_demo_only" ? "Owned synthetic geometry only. " : ""}
                 {bottomhole?.notice ?? "Requires a reviewed true-north survey on both wells."}
               </p>
               <div className="score-explanation">

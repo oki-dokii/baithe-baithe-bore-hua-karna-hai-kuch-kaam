@@ -22,8 +22,9 @@ pytestmark = pytest.mark.skipif(
 def test_bottomhole_proximity_fails_closed_then_resolves_with_reviewed_true_north():
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {get_settings().viewer_token}"}
-    active = stable_id("wellbore", "SYN-A-MAIN")
-    offset = stable_id("wellbore", "SYN-B-MAIN")
+    # A/B are attested by the guarded demo rehearsal; keep this gate test on C/D.
+    active = stable_id("wellbore", "SYN-C-MAIN")
+    offset = stable_id("wellbore", "SYN-D-MAIN")
     with connection() as conn:
         load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
     url = f"/api/v1/wellbores/{active}/bottomhole-proximity?offset_wellbore_id={offset}"
@@ -52,7 +53,7 @@ def test_bottomhole_proximity_fails_closed_then_resolves_with_reviewed_true_nort
             surface_distance = conn.execute(
                 """SELECT ST_Distance(a.surface_point,b.surface_point) AS distance_m
                    FROM well a,well b WHERE a.id=%s AND b.id=%s""",
-                (stable_id("well", "SYN-A"), stable_id("well", "SYN-B")),
+                (stable_id("well", "SYN-C"), stable_id("well", "SYN-D")),
             ).fetchone()["distance_m"]
         assert resolved.json()["bottomhole_horizontal_distance_m"] == pytest.approx(
             surface_distance, abs=0.1
