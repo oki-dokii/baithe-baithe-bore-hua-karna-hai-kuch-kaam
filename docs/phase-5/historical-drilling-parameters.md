@@ -21,12 +21,13 @@ cannot conceal a completion/workover interval in another. This is a
 wellbore-level gate (more conservative than grouping sidetracks by physical
 well), not an operator-reviewed drilling-state classification.
 
-`drilling-ahead-screen-v2` reports current-row count, span, good five-channel
+`drilling-ahead-screen-v3` reports current-row count, span, good five-channel
 completeness, rig-state and quality distributions, active rows (ROP >0.5 m/h
 and WOB >2 kN), ROP/WOB ranges, measured-depth advancement, regressions,
 duplicate timestamps and largest/median gaps. Its explicit initial stop rules
 require at least 30 rows spanning 10 minutes, 80% good complete channels,
-10 active forward-drilling rows, ROP range at least 1 m/h, WOB range at least
+10 active forward-drilling rows comprising at least half the selected slice,
+ROP range at least 1 m/h, WOB range at least
 2 kN, 5 m of net MD advancement over at least five steps greater than 0.01 m, and no gap
 over 30 minutes, duplicate observation time or >1 m forward-drilling MD
 regression. These are **conservative screening heuristics, not validated
@@ -42,7 +43,12 @@ identify the export and its data-use authority. The caller supplies a
 source-specific, reviewed unit mapping, explicit source timezone and measured-
 depth datum; the command does not infer or approve them. `observed_at` means
 sensor observation time, `available_at` earliest decision-time availability,
-and `received_at` import receipt. All are timezone-aware and ordered.
+and `received_at` a pinned source-receipt time. All are timezone-aware and ordered.
+The mapper must reuse the same `receipt_at` on re-import; generating a fresh
+time changes the immutable sample revision hash. `mapping_evidence` stores
+unit/depth/availability references, availability policy, rig-state basis,
+selection bounds and pinned receipt time with the source. These fields are
+immutable once staged, so review must occur before first staging.
 Canonical channels use m/h, kN, rpm, kN·m, L/min, and kg/m³ respectively;
 conversion from raw values belongs in a source-specific mapping with an
 independently reviewed `mapping_version`. `raw_values` preserves the source
@@ -54,7 +60,8 @@ Every source starts `staged`. A reviewer must verify the permission,
 wellbore identity, source units, timestamp semantics, datum, rig-state and
 quality mapping, then explicitly qualify the dataset, depth reference and
 source. The database blocks qualification without the applicable dataset
-provenance and the three source-review flags. Direct SQL qualification is
+provenance, persisted mapping evidence and all four source-review flags
+(units, timezone, datum, rig state). Direct SQL qualification is
 reserved for authorized review workflows; staging never performs it.
 `eligible_anchors()` returns only current non-tombstoned revisions with five
 complete canonical sensors, good quality, forward drilling, approved depth

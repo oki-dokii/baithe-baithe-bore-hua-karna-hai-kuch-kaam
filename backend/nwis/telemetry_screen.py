@@ -10,11 +10,12 @@ from typing import Iterable
 
 from nwis.drilling_parameters import HistoricalSample
 
-SCREEN_VERSION = "drilling-ahead-screen-v2"
+SCREEN_VERSION = "drilling-ahead-screen-v3"
 MIN_ROWS = 30
 MIN_DURATION_MINUTES = 10
 MIN_COMPLETE_FRACTION = 0.8
 MIN_ACTIVE_ROWS = 10
+MIN_ACTIVE_FRACTION = 0.5
 MIN_DEPTH_ADVANCE_M = 5.0
 MIN_ADVANCING_STEPS = 5
 MIN_ADVANCING_STEP_M = 0.01
@@ -47,6 +48,9 @@ def screen_wellbore(samples: Iterable[HistoricalSample], wellbore_id: str) -> di
     active = [row for row in forward if row.rop_m_per_h > 0.5 and row.wob_kn > 2]
     if len(active) < MIN_ACTIVE_ROWS:
         blockers.append("insufficient_on_bottom_drilling_evidence")
+    active_fraction = len(active) / len(rows) if rows else 0
+    if active_fraction < MIN_ACTIVE_FRACTION:
+        blockers.append("active_drilling_fraction_too_low")
     if not forward or max(row.rop_m_per_h for row in forward) - min(
         row.rop_m_per_h for row in forward
     ) < 1:
@@ -91,6 +95,7 @@ def screen_wellbore(samples: Iterable[HistoricalSample], wellbore_id: str) -> di
         "good_complete_fraction": round(complete_fraction, 4),
         "forward_complete_rows": len(forward),
         "active_drilling_rows": len(active),
+        "active_drilling_fraction": round(active_fraction, 4),
         "rop_min_max": [min((r.rop_m_per_h for r in forward), default=None),
                         max((r.rop_m_per_h for r in forward), default=None)],
         "wob_min_max": [min((r.wob_kn for r in forward), default=None),
@@ -121,6 +126,7 @@ def screen_batch(samples: Iterable[HistoricalSample]) -> dict:
             "min_duration_minutes": MIN_DURATION_MINUTES,
             "min_good_complete_fraction": MIN_COMPLETE_FRACTION,
             "min_active_drilling_rows": MIN_ACTIVE_ROWS,
+            "min_active_drilling_fraction": MIN_ACTIVE_FRACTION,
             "min_depth_advance_m": MIN_DEPTH_ADVANCE_M,
             "min_advancing_steps": MIN_ADVANCING_STEPS,
             "min_advancing_step_m": MIN_ADVANCING_STEP_M,

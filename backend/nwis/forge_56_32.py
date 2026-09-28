@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nwis.drilling_parameters import HistoricalBatch, HistoricalSample
+from nwis.drilling_parameters import HistoricalBatch, HistoricalSample, SourceMappingEvidence
 from nwis.telemetry_screen import screen_batch
 
 SOURCE_URL = "https://gdr.openei.org/files/1295/56-32%2010sec%20data%2027029986.csv"
@@ -39,7 +39,7 @@ GPM_TO_LPM = 3.785411784
 
 class Forge56Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    schema_version: Literal["forge-56-32-raw-10s-v1"]
+    schema_version: Literal["forge-56-32-raw-10s-v2"]
     dataset_id: UUID
     wellbore_id: UUID
     depth_reference_id: UUID
@@ -50,6 +50,7 @@ class Forge56Config(BaseModel):
     availability_lag_seconds: int = Field(ge=0)
     availability_reference: str = Field(min_length=1)
     unit_reference: str = Field(min_length=1)
+    receipt_at: datetime
     source_units: dict[str, str]
     start_local: datetime
     end_local: datetime
@@ -66,6 +67,8 @@ class Forge56Config(BaseModel):
             raise ValueError("Select local wall-clock bounds without timezone offsets")
         if self.end_local <= self.start_local:
             raise ValueError("Invalid local interval")
+        if self.receipt_at.tzinfo is None or self.receipt_at.utcoffset() is None:
+            raise ValueError("Pin one timezone-aware receipt timestamp for repeatable imports")
         return self
 
 
@@ -92,7 +95,7 @@ def source_hash(path: Path) -> str:
 def prepare(path: Path, config: Forge56Config) -> tuple[HistoricalBatch, dict]:
     digest = source_hash(path)
     zone = ZoneInfo(config.source_timezone)
-    received = datetime.now(timezone.utc)
+    received = config.receipt_at.astimezone(timezone.utc)
     samples: list[HistoricalSample] = []
     skipped = {"outside_interval": 0, "missing_timestamp": 0,
                "missing_depth": 0, "invalid_numeric": 0}
@@ -162,7 +165,17 @@ def prepare(path: Path, config: Forge56Config) -> tuple[HistoricalBatch, dict]:
         permission_reference=config.permission_reference,
         source_timezone=config.source_timezone, md_datum=config.md_datum,
         source_units=config.source_units,
-        mapping_version="forge-56-32-raw-10s-v1",
+        mapping_version="forge-56-32-raw-10s-v2",
+        mapping_evidence=SourceMappingEvidence(
+            unit_reference=config.unit_reference,
+            depth_semantics_reference=config.depth_semantics_reference,
+            availability_reference=config.availability_reference,
+            availability_policy=f"fixed_lag_seconds:{config.availability_lag_seconds}",
+            rig_state_basis="heuristic_on_bottom_rop_wob_rop_and_md_increase_v1",
+            selection_start_at=config.start_local.replace(tzinfo=zone).astimezone(timezone.utc),
+            selection_end_at=config.end_local.replace(tzinfo=zone).astimezone(timezone.utc),
+            receipt_at=received,
+        ),
         samples=samples,
     )
     report = screen_batch(samples)
