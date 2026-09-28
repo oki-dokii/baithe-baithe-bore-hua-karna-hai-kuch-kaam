@@ -5,6 +5,29 @@
   padding: 20px 0 30px;
   border-top: 1px solid var(--line);
 }
+.brief-actions { display: flex; gap: 10px; margin: 0 0 18px; flex-wrap: wrap; }
+.brief-actions button { border: 1px solid var(--ink); background: var(--paper); color: var(--ink); padding: 10px 14px; font: 11px monospace; cursor: pointer; }
+.brief-actions button:first-child { background: var(--ink); color: var(--paper); }
+.brief-actions button:disabled { opacity: .55; cursor: default; }
+.offset-brief { margin: 0 0 26px; border: 1px solid var(--line); background: #fffefb; padding: 24px 30px; color: var(--ink); }
+.offset-brief h2 { margin: 5px 0; font: 34px Georgia, serif; }
+.brief-deck, .brief-meta, .brief-footer { font: 10px/1.5 monospace; color: var(--muted); }
+.brief-guard { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 12px; }
+.brief-offset { border-bottom: 1px solid var(--line); padding: 11px 0; }
+.brief-offset h3 { margin: 0; font: 18px Georgia, serif; }
+.brief-offset h3 span { font: 10px monospace; color: var(--accent); }
+.brief-offset h3 small { float: right; font: 10px monospace; color: var(--muted); }
+.brief-event { margin: 7px 0 0 22px; font-size: 11px; line-height: 1.4; }
+.brief-event p { margin: 3px 0; }
+.brief-event small, .brief-empty { color: var(--muted); font-size: 10px; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body * { visibility: hidden !important; }
+  .offset-brief, .offset-brief * { visibility: visible !important; }
+  .offset-brief { position: absolute; inset: 0 auto auto 0; width: 100%; box-sizing: border-box; border: 0; margin: 0; padding: 0; font-size: 9pt; }
+  .offset-brief h2 { font-size: 25pt; }
+  .brief-offset { break-inside: avoid; }
+}
 .atlas-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 290px;

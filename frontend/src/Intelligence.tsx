@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DepthTrack, MitigationGraph, MudWindow, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
+import OffsetBrief, { OffsetBriefData } from "./OffsetBrief";
 
 type Well = {
   id: string;
@@ -49,6 +50,13 @@ type Comparison = {
   target_interval: Interval;
   score_formula: string;
   truncated: boolean;
+};
+type BottomholeProximity = {
+  status: "resolved" | "unresolved";
+  active_position: { status: string; reason?: string };
+  offset_position: { status: string; reason?: string };
+  bottomhole_horizontal_distance_m: number | null;
+  notice: string;
 };
 type Citation = {
   passage_id: string;
@@ -234,6 +242,9 @@ export default function Intelligence({ token }: { token: string }) {
   const [intervalId, setIntervalId] = useState("");
   const [radius, setRadius] = useState(5);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [bottomhole, setBottomhole] = useState<BottomholeProximity | null>(null);
+  const [brief, setBrief] = useState<OffsetBriefData | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
   const [selected, setSelected] = useState("");
   const [planningPoint, setPlanningPoint] = useState<PlanningPoint | null>(null);
   const [record, setRecord] = useState<Case | null>(null);
@@ -307,6 +318,8 @@ export default function Intelligence({ token }: { token: string }) {
   useEffect(() => {
     let live = true;
     setComparison(null);
+    setBottomhole(null);
+    setBrief(null);
     setSelected("");
     setRecord(null);
     setSource(null);
@@ -335,6 +348,17 @@ export default function Intelligence({ token }: { token: string }) {
       clearTimeout(timer);
     };
   }, [token, activeId, intervalId, radius]);
+  useEffect(() => {
+    let live = true;
+    setBottomhole(null);
+    if (activeId && selected) {
+      request<BottomholeProximity>(token,
+        `/wellbores/${activeId}/bottomhole-proximity?offset_wellbore_id=${selected}`)
+        .then((data) => { if (live) setBottomhole(data); })
+        .catch(() => { if (live) setBottomhole(null); });
+    }
+    return () => { live = false; };
+  }, [token, activeId, selected]);
   useEffect(() => {
     setResults(null);
     requestSequence.current++;
@@ -404,6 +428,20 @@ export default function Intelligence({ token }: { token: string }) {
       if (sequence === requestSequence.current) setError((e as Error).message);
     } finally {
       if (sequence === requestSequence.current) setSearching(false);
+    }
+  }
+  async function prepareBrief() {
+    if (!activeId || !intervalId) return;
+    setBriefLoading(true);
+    setBrief(null);
+    try {
+      const data = await request<OffsetBriefData>(token,
+        `/wellbores/${activeId}/offset-brief?target_interval_id=${intervalId}&radius_km=${radius}`);
+      setBrief(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBriefLoading(false);
     }
   }
   return (
@@ -480,6 +518,13 @@ export default function Intelligence({ token }: { token: string }) {
       )}
       {active && comparison && (
         <>
+          <div className="brief-actions">
+            <button type="button" onClick={prepareBrief} disabled={briefLoading}>
+              {briefLoading ? "Preparing cited brief…" : "Prepare one-page offset brief"}
+            </button>
+            {brief && <button type="button" onClick={() => window.print()}>Print / save as PDF</button>}
+          </div>
+          {brief && <OffsetBrief data={brief} />}
           <div className="atlas-grid">
             <div className="map-frame">
               <WellMap
@@ -559,6 +604,14 @@ export default function Intelligence({ token }: { token: string }) {
                 </span>
               </div>
               <p className="footnote">{comparison.score_formula}</p>
+              <p className="footnote">
+                Surface-selected pair · bottom-hole horizontal separation: {bottomhole?.status === "resolved"
+                  ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
+                  : "unavailable"}. {bottomhole?.status === "unresolved"
+                  ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
+                  : ""}
+                {bottomhole?.notice ?? "Requires a reviewed true-north survey on both wells."}
+              </p>
               <div className="score-explanation">
                 <span>
                   Shared formation:{" "}

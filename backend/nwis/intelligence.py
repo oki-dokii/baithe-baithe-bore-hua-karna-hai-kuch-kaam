@@ -13,6 +13,8 @@ from nwis.config import get_settings
 from nwis.ingestion.contracts import Hazard
 from nwis.security import current_principal
 from nwis.semantic import MIN_COSINE, MODEL_ID, SemanticUnavailable, model, query_vector
+from nwis.trajectory_position import bottomhole_position
+from nwis.offset_brief import build_brief
 
 router = APIRouter(prefix="/api/v1")
 METHOD = "formation-relative-tvd-offset-v1"
@@ -152,6 +154,21 @@ def bore(conn, wellbore_id):
     return row
 
 
+def position_profile(identity, stations):
+    try:
+        if identity["survey_reference_review_state"] != "approved":
+            raise ValueError("survey_reference_not_reviewed")
+        if not stations or identity["survey_reference_version"] != stations[0]["survey_version"]:
+            raise ValueError("survey_version_not_reviewed")
+        return {"status": "resolved", **bottomhole_position(
+            stations,
+            azimuth_reference=identity["azimuth_reference"],
+            review_state=identity["survey_reference_review_state"],
+        )}
+    except ValueError as exc:
+        return {"status": "unresolved", "reason": str(exc)}
+
+
 @router.get("/intelligence/wellbores")
 def wellbores(_principal=Depends(current_principal)):
     with connection() as conn:
@@ -169,12 +186,58 @@ def wellbores(_principal=Depends(current_principal)):
 def trajectory(wellbore_id: UUID, _principal=Depends(current_principal)):
     with connection() as conn:
         identity = bore(conn, wellbore_id)
+        stations = survey(conn, wellbore_id)
         return {
             "wellbore": identity,
-            "stations": survey(conn, wellbore_id),
+            "stations": stations,
+            "position_profile": position_profile(identity, stations),
             "intervals": interval_rows(conn, wellbore_id),
             "units": "m",
         }
+
+
+@router.get("/wellbores/{wellbore_id}/bottomhole-proximity")
+def bottomhole_proximity(
+    wellbore_id: UUID,
+    offset_wellbore_id: UUID,
+    _principal=Depends(current_principal),
+):
+    """Pairwise projected horizontal separation, not anti-collision clearance."""
+    with connection() as conn:
+        active = bore(conn, wellbore_id)
+        offset = bore(conn, offset_wellbore_id)
+        if active["dataset_id"] != offset["dataset_id"] or active["id"] == offset["id"]:
+            raise HTTPException(422, "Select two distinct wellbores in one dataset")
+        if active["well_status"] == "benchmark_unlocated" or offset["well_status"] == "benchmark_unlocated":
+            raise HTTPException(422, "Verified surface positions are required")
+        left = position_profile(active, survey(conn, wellbore_id))
+        right = position_profile(offset, survey(conn, offset_wellbore_id))
+        result = {
+            "active_wellbore_id": wellbore_id,
+            "offset_wellbore_id": offset_wellbore_id,
+            "status": "unresolved",
+            "active_position": left,
+            "offset_position": right,
+            "bottomhole_horizontal_distance_m": None,
+            "method": "minimum_curvature_true_north_v1",
+            "notice": "Horizontal endpoint separation only; not an anti-collision, uncertainty, or drilling-safety assessment.",
+        }
+        if left["status"] != "resolved" or right["status"] != "resolved":
+            return result
+        def projected(identity, position):
+            north, east = position["north_m"], position["east_m"]
+            return (identity["longitude"], identity["latitude"],
+                    math.hypot(north, east), math.atan2(east, north))
+
+        result["bottomhole_horizontal_distance_m"] = conn.execute(
+            """SELECT ST_Distance(
+                 ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s),
+                 ST_Project(ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,%s,%s)
+               ) AS distance_m""",
+            (*projected(active, left), *projected(offset, right)),
+        ).fetchone()["distance_m"]
+        result["status"] = "resolved"
+        return result
 
 
 @router.get("/wellbores/{wellbore_id}/analogues")
@@ -320,6 +383,18 @@ def event_case(conn, event_id):
             f"SELECT * FROM {table} WHERE event_id=%s ORDER BY id", (event_id,)
         ).fetchall()
     return event
+
+
+@router.get("/wellbores/{wellbore_id}/offset-brief")
+def offset_brief(
+    wellbore_id: UUID,
+    target_interval_id: UUID,
+    radius_km: float = Query(5, ge=0.1, le=100),
+    _principal=Depends(current_principal),
+):
+    comparison = analogues(wellbore_id, target_interval_id, radius_km, _principal)
+    with connection() as conn:
+        return build_brief(comparison, lambda event_id: event_case(conn, event_id))
 
 
 @router.get("/events/{event_id}")

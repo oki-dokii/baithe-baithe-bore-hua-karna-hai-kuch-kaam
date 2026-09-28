@@ -19,6 +19,58 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_bottomhole_proximity_fails_closed_then_resolves_with_reviewed_true_north():
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {get_settings().viewer_token}"}
+    active = stable_id("wellbore", "SYN-A-MAIN")
+    offset = stable_id("wellbore", "SYN-B-MAIN")
+    with connection() as conn:
+        load_fixture(conn, Path("../specs/fixtures/golden-demo.json"))
+    url = f"/api/v1/wellbores/{active}/bottomhole-proximity?offset_wellbore_id={offset}"
+    unresolved = client.get(url, headers=headers)
+    assert unresolved.status_code == 200
+    assert unresolved.json()["status"] == "unresolved"
+    assert unresolved.json()["bottomhole_horizontal_distance_m"] is None
+    try:
+        with connection() as conn:
+            conn.execute(
+                """UPDATE wellbore SET azimuth_reference='true',survey_reference_review_state='approved',
+                   survey_reference_version=1,survey_reference_reviewed_by='synthetic-test',
+                   survey_reference_review_reference='owned synthetic survey fixture'
+                   WHERE id IN (%s,%s)""",
+                (active, offset),
+            )
+            conn.execute(
+                "UPDATE trajectory_station SET inclination_deg=0,azimuth_deg=0 WHERE wellbore_id IN (%s,%s)",
+                (active, offset),
+            )
+        resolved = client.get(url, headers=headers)
+        assert resolved.status_code == 200
+        assert resolved.json()["status"] == "resolved"
+        assert resolved.json()["bottomhole_horizontal_distance_m"] > 0
+        with connection() as conn:
+            surface_distance = conn.execute(
+                """SELECT ST_Distance(a.surface_point,b.surface_point) AS distance_m
+                   FROM well a,well b WHERE a.id=%s AND b.id=%s""",
+                (stable_id("well", "SYN-A"), stable_id("well", "SYN-B")),
+            ).fetchone()["distance_m"]
+        assert resolved.json()["bottomhole_horizontal_distance_m"] == pytest.approx(
+            surface_distance, abs=0.1
+        )
+    finally:
+        with connection() as conn:
+            conn.execute(
+                """UPDATE wellbore SET azimuth_reference=NULL,survey_reference_review_state='unreviewed',
+                   survey_reference_version=NULL,survey_reference_reviewed_by=NULL,
+                   survey_reference_review_reference=NULL WHERE id IN (%s,%s)""",
+                (active, offset),
+            )
+            conn.execute(
+                "UPDATE trajectory_station SET inclination_deg=NULL,azimuth_deg=NULL WHERE wellbore_id IN (%s,%s)",
+                (active, offset),
+            )
+
+
 def test_spatial_correlation_filtered_search_and_citations():
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {get_settings().viewer_token}"}
@@ -76,6 +128,13 @@ def test_spatial_correlation_filtered_search_and_citations():
             m for c in comparison["items"] for m in c["mappings"] if m["event_id"] == str(event_id)
         )
         assert mapped["mapped_start_md_m"] == 2130 and mapped["mapped_end_md_m"] == 2140
+        brief = client.get(
+            f"/api/v1/wellbores/{active}/offset-brief?target_interval_id={target}&radius_km=5",
+            headers=headers,
+        )
+        assert brief.status_code == 200
+        brief_events = [event for well in brief.json()["offsets"] for event in well["events"]]
+        assert any(event["event_id"] == str(event_id) and event["citations"] for event in brief_events)
         body = {
             "dataset_id": str(dataset),
             "question": "mud losses",
