@@ -21,21 +21,26 @@ cd backend
 The config must satisfy `Forge56Config` and supply existing dataset, wellbore
 and depth-reference UUIDs; an IANA source timezone; local selection bounds;
 the MD datum and evidence for interpreting `Hole Depth` as MD; a documented
-observation-to-availability delay; permission evidence; and the six exact
-source units. The [standardized companion](https://gdr.openei.org/files/1295/56-32%2010sec%20data%2027029986_standard.csv)
+observation-to-availability delay; a single pinned timezone-aware `receipt_at`
+for repeatable re-import; permission evidence; and the six exact source units.
+The config schema is `forge-56-32-raw-10s-v2`. The
+[standardized companion](https://gdr.openei.org/files/1295/56-32%2010sec%20data%2027029986_standard.csv)
 has a second header row showing feet, klbf, rpm, kft-lbf, gpm and ft/h. That
 companion is **supporting metadata, not a reviewed guarantee** that every
 raw field and datum is mapped correctly. The source's `Memos` column is
 retained as raw evidence only, never auto-labeled. A 56-32 slice is geothermal
 analogue data, not OIL field validation.
 
-The output is created only when the drilling-ahead screen passes. Pass means
+The output is created only when the drilling-ahead screen passes. Screen v3
+requires at least half the slice to be active forward-drilling candidates.
+Pass means
 `screen_passed_needs_review`, not `qualified`; the batch can then be staged
 using `nwis.drilling_parameters` after reviewing source identity and mapping.
 The current schema admits one selected continuous interval per source-file
-checksum. Multi-interval imports need a versioned source-selection model,
-not a silent change to this pilot. The selected interval must be frozen before
-labels or train/test splits are examined.
+checksum. Multi-interval imports or correction of rejected mapping evidence
+need a versioned source-selection model, not a silent change to this pilot.
+The selected interval and receipt time must be frozen before first staging;
+labels and train/test splits remain separate review steps.
 
 ## Actual file diagnostic, 2026-09-28
 
@@ -44,7 +49,7 @@ was downloaded locally (24,415,711 bytes, SHA-256
 `372fe53491f0a0ad704faeea4ed8bec0bdf8de1c946a70810d4d1140a5060a48`)
 and kept out of Git. A **provisional, read-only** screen of CSV wall-clock
 `2021-02-13 13:00:00–14:00:00` found 360 records, 336 heuristic active rows,
-13.11 m net `Hole Depth` gain and 335 increasing-depth steps. Screen v2
+13.11 m net `Hole Depth` gain and 335 increasing-depth steps. Screen v3
 returned `screen_passed_needs_review` with no screening blockers. This shows
 that this particular slice is not the flat-ROP completion/workover pattern;
 it does **not** validate timezone (`America/Denver` was only a screening

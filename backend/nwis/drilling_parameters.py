@@ -63,6 +63,29 @@ class HistoricalSample(BaseModel):
         return self
 
 
+class SourceMappingEvidence(BaseModel):
+    """Immutable assumptions needed to reproduce a mapped historical slice."""
+
+    model_config = ConfigDict(extra="forbid")
+    unit_reference: str = Field(min_length=1)
+    depth_semantics_reference: str = Field(min_length=1)
+    availability_reference: str = Field(min_length=1)
+    availability_policy: str = Field(min_length=1)
+    rig_state_basis: str = Field(min_length=1)
+    selection_start_at: datetime
+    selection_end_at: datetime
+    receipt_at: datetime
+
+    @model_validator(mode="after")
+    def ordered_aware_times(self):
+        times = (self.selection_start_at, self.selection_end_at, self.receipt_at)
+        if any(t.tzinfo is None or t.utcoffset() is None for t in times):
+            raise ValueError("Mapping evidence times require explicit UTC offsets")
+        if not times[0] < times[1] <= times[2]:
+            raise ValueError("Selection must end before receipt")
+        return self
+
+
 class HistoricalBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal["historical-drilling-parameters-v1"]
@@ -76,6 +99,7 @@ class HistoricalBatch(BaseModel):
     md_datum: str = Field(min_length=1)
     source_units: dict[str, str]
     mapping_version: str = Field(min_length=1)
+    mapping_evidence: SourceMappingEvidence
     samples: list[HistoricalSample] = Field(min_length=1)
 
 
@@ -92,7 +116,7 @@ def stage_batch(conn: Connection, batch: HistoricalBatch, source_bytes: bytes) -
         raise ValueError("historical_source_requires_non_synthetic_dataset")
     identity = ("dataset_id", "external_id", "source_sha256", "source_kind",
                 "source_reference", "permission_reference", "source_timezone",
-                "md_datum", "source_units", "mapping_version")
+                "md_datum", "source_units", "mapping_version", "mapping_evidence")
     # Check both unique identities, so a changed checksum cannot silently
     # become a second version of the same external source.
     existing = conn.execute(
@@ -104,6 +128,7 @@ def stage_batch(conn: Connection, batch: HistoricalBatch, source_bytes: bytes) -
     if len(existing) > 1:
         raise ValueError("source_identity_collision")
     expected = batch.model_dump(exclude={"samples", "schema_version"})
+    expected["mapping_evidence"] = batch.mapping_evidence.model_dump(mode="json")
     if existing:
         source = existing[0]
         if any(source[key] != expected[key] for key in identity):
@@ -136,12 +161,13 @@ def stage_batch(conn: Connection, batch: HistoricalBatch, source_bytes: bytes) -
         conn.execute(
             """INSERT INTO drilling_parameter_source
                (id,dataset_id,external_id,source_sha256,source_kind,source_reference,
-                permission_reference,source_timezone,md_datum,source_units,mapping_version)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                permission_reference,source_timezone,md_datum,source_units,mapping_version,
+                mapping_evidence)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (source_id, batch.dataset_id, batch.external_id, batch.source_sha256,
              batch.source_kind, batch.source_reference, batch.permission_reference,
              batch.source_timezone, batch.md_datum, Jsonb(batch.source_units),
-             batch.mapping_version),
+             batch.mapping_version, Jsonb(expected["mapping_evidence"])),
         )
     staged = 0
     for sample in batch.samples:
@@ -196,6 +222,7 @@ def eligible_anchors(conn: Connection, source_id: UUID) -> list[dict]:
            JOIN depth_reference ref ON ref.id=s.depth_reference_id
            WHERE src.id=%s AND src.qualification_state='qualified'
              AND src.units_reviewed AND src.timezone_reviewed AND src.datum_reviewed
+             AND src.rig_state_reviewed
              AND d.kind IN ('public','private') AND d.qualification_status='qualified'
              AND d.origin_kind IN ('operator_record','public_primary')
              AND d.authorization_state IN ('public_permitted','restricted_authorized')

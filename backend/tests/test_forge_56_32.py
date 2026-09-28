@@ -10,13 +10,14 @@ from nwis.forge_56_32 import Forge56Config, UNITS, prepare
 
 def config(**changes):
     return Forge56Config.model_validate({
-        "schema_version": "forge-56-32-raw-10s-v1",
+        "schema_version": "forge-56-32-raw-10s-v2",
         "dataset_id": uuid4(), "wellbore_id": uuid4(), "depth_reference_id": uuid4(),
         "permission_reference": "owned fixture terms", "source_timezone": "UTC",
         "md_datum": "KB", "depth_semantics_reference": "fixture reviewer assertion",
         "availability_lag_seconds": 10,
         "availability_reference": "fixture time semantics",
         "unit_reference": "fixture matching standardized header",
+        "receipt_at": "2026-01-01T00:00:00Z",
         "source_units": UNITS,
         "start_local": "2021-02-08T00:00:00",
         "end_local": "2021-02-08T00:20:00",
@@ -61,6 +62,13 @@ def test_forge_mapper_converts_units_and_preserves_unreviewed_state(tmp_path):
     assert batch.samples[30].raw_values["Memos"] == "lost circulation?"
     assert report["labels_created"] == 0
     assert not report["mud_density_supplied"]
+    repeated, _ = prepare(path, config(
+        dataset_id=batch.dataset_id, wellbore_id=batch.samples[0].wellbore_id,
+        depth_reference_id=batch.samples[0].depth_reference_id,
+    ))
+    assert repeated.samples[0].model_dump(mode="json") == batch.samples[0].model_dump(mode="json")
+    assert batch.mapping_evidence.availability_policy == "fixed_lag_seconds:10"
+    assert batch.mapping_evidence.receipt_at == batch.samples[0].received_at
 
 
 def test_forge_mapper_stops_flat_slice_and_rejects_unverified_units(tmp_path):

@@ -36,7 +36,18 @@ def batch(dataset, bore, **changes):
         "source_kind": "csv_export", "source_reference": "owned test fixture",
         "permission_reference": "owned test fixture", "source_timezone": "UTC",
         "md_datum": "KB", "source_units": {"md": "m", "wob": "kN"},
-        "mapping_version": "test-v1", "samples": [sample(
+        "mapping_version": "test-v1",
+        "mapping_evidence": {
+            "unit_reference": "owned fixture mapping",
+            "depth_semantics_reference": "owned fixture MD datum",
+            "availability_reference": "owned fixture capture lag",
+            "availability_policy": "fixed_lag_seconds:2",
+            "rig_state_basis": "owned fixture manual classification",
+            "selection_start_at": NOW,
+            "selection_end_at": NOW + timedelta(hours=1),
+            "receipt_at": NOW + timedelta(hours=2),
+        },
+        "samples": [sample(
             bore, source_record_id=f"row-{i + 1}",
             observed_at=NOW + timedelta(seconds=20 * i),
             available_at=NOW + timedelta(seconds=20 * i + 2),
@@ -72,6 +83,23 @@ def test_non_drilling_slice_stops_before_import():
     assert "rop_constant_or_near_zero_variation" in report["wellbores"][0]["blockers"]
     assert "no_sustained_measured_depth_advance" in report["wellbores"][0]["blockers"]
     assert screen_batch(batch(uuid4(), bore).samples)["decision"] == "screen_passed_needs_review"
+
+
+def test_short_drilling_episode_cannot_mask_non_drilling_slice():
+    bore = uuid4()
+    rows = [sample(
+        bore, source_record_id=f"row-{i + 1}",
+        observed_at=NOW + timedelta(seconds=20 * i),
+        available_at=NOW + timedelta(seconds=20 * i + 2),
+        received_at=NOW + timedelta(seconds=20 * i + 3),
+        md_m=500 + (0.8 * (i - 25) if 25 <= i < 35 else (0 if i < 25 else 8)),
+        rig_state="forward_drilling" if 25 <= i < 35 else "unknown",
+        rop_m_per_h=8 + i % 4 if 25 <= i < 35 else 0,
+        wob_kn=45 + i % 5 if 25 <= i < 35 else 0,
+    ) for i in range(60)]
+    report = screen_batch(batch(uuid4(), bore, samples=rows).samples)
+    assert report["decision"] == "stop"
+    assert "active_drilling_fraction_too_low" in report["wellbores"][0]["blockers"]
 
 
 def test_gap_and_incomplete_wellbore_stop_entire_export():
@@ -132,6 +160,18 @@ def test_staging_revision_and_fail_closed_qualification():
         result = stage_batch(conn, source, RAW)
         assert result["staged_rows"] == 40
         assert stage_batch(conn, source, RAW)["staged_rows"] == 0
+        stored_mapping = conn.execute(
+            "SELECT mapping_evidence FROM drilling_parameter_source WHERE id=%s",
+            (result["source_id"],),
+        ).fetchone()["mapping_evidence"]
+        assert stored_mapping["availability_reference"] == "owned fixture capture lag"
+        with pytest.raises(ValueError, match="source_identity_or_mapping_changed"):
+            stage_batch(conn, batch(
+                dataset_id, bore_id,
+                mapping_evidence=source.mapping_evidence.model_copy(
+                    update={"availability_reference": "different evidence"}
+                ),
+            ), RAW)
         assert eligible_anchors(conn, result["source_id"]) == []
         tombstones = [sample(
             bore_id, source_record_id=f"row-{i + 1}", revision=2,
@@ -162,9 +202,19 @@ def test_staging_revision_and_fail_closed_qualification():
                applicability='analog_only' WHERE id=%s""", (dataset_id,),
         )
         conn.execute("UPDATE depth_reference SET review_state='approved' WHERE id=%s", (ref_id,))
+        with pytest.raises(CheckViolation):
+            with conn.transaction():
+                conn.execute(
+                    """UPDATE drilling_parameter_source SET units_reviewed=true,
+                       timezone_reviewed=true, datum_reviewed=true,
+                       qualification_state='qualified', qualified_by='test-reviewer',
+                       qualified_at=now() WHERE id=%s""",
+                    (result["source_id"],),
+                )
         conn.execute(
             """UPDATE drilling_parameter_source SET units_reviewed=true,
-               timezone_reviewed=true, datum_reviewed=true, qualification_state='qualified',
+               timezone_reviewed=true, datum_reviewed=true, rig_state_reviewed=true,
+               qualification_state='qualified',
                qualified_by='test-reviewer', qualified_at=now() WHERE id=%s""",
             (result["source_id"],),
         )
