@@ -10,7 +10,7 @@ The first **proposed** task is mud-loss onset in `(anchor MD, anchor MD + 100 m]
 
 Request a permitted, de-identified sample covering multiple physical wells and their sidetracks, with original identities linked consistently, timestamps, MD/datum and units; pre-onset ROP, WOB, RPM, torque, flow-in and mud density; reviewed loss onsets; drilling-state/coverage records; and permission/provenance references. Preserve original geography. Do not send private reports to cloud providers by default.
 
-Feature schema `mud-loss-features-v1`: `rop_m_per_h`, `wob_kn`, `rpm`, `torque_kn_m`, `flow_in_l_per_min`, `mud_density_kg_per_m3`. Values must be finite and nonnegative. These are candidate pre-anchor features, not proven causal predictors. A reviewed source adapter must ensure availability at prediction time, forward-drilling segments, sensor quality, gaps, units and no future aggregation. This adapter is not yet implemented.
+Feature schema `mud-loss-features-v1`: `rop_m_per_h`, `wob_kn`, `rpm`, `torque_kn_m`, `flow_in_l_per_min`, `mud_density_kg_per_m3`. Values must be finite and nonnegative. These are candidate pre-anchor features, not proven causal predictors. A [FORGE 56-32 telemetry pilot](forge-56-32-source-pilot.md) maps five sensor channels from one public CSV format and screens drilling-ahead intervals; the reviewed source-to-label adapter is **not** implemented. Mud density, source-time availability and future coverage still require independent evidence.
 
 ## Local audit
 
@@ -25,6 +25,12 @@ All sidetracks and synthetic replicas must share the physical-well ID. The valid
 ## Candidate data audit — 2026-09-27
 
 The [public dataset audit](dataset-candidates.md) recommends Utah FORGE for a source-qualification pilot and Volve as the petroleum-domain follow-up. Direct header inspection found useful 16A/56-32 telemetry, but no mud-density column in either sampled CSV and no adjudicated mud-loss onset label. The 16A daily summary contains a seepage-loss narrative, not an exact onset. No public source has passed the training gate.
+
+The local [56-32 source pilot](forge-56-32-source-pilot.md) found one real
+drilling-ahead-looking hour with 360 rows and 13.11 m net depth advance under
+provisional mapping assumptions. It was screened read-only, not staged or
+qualified, and supplies neither mud density nor labels. A review-only WITSML
+message extractor is available; no Volve message export has been inspected.
 
 A [local Volve-overlap inventory audit and transport-neutral feed-change harness](qualification-experiments.md) now exercise the *software checks* for file pairing, review gaps, duplicate/corrected/delayed readings and freshness. The only executed inventory and feed are owned synthetic examples. Actual Volve file overlap, WITSML protocol conformance and eRTMAC access remain unverified.
 
