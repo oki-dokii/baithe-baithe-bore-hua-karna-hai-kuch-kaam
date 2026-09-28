@@ -15,6 +15,12 @@ from psycopg.types.json import Jsonb
 from nwis.db import connection
 
 
+class DrillingScreenError(ValueError):
+    def __init__(self, report: dict):
+        self.report = report
+        super().__init__("drilling_ahead_screen_stopped_import")
+
+
 class HistoricalSample(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     wellbore_id: UUID
@@ -105,8 +111,28 @@ def stage_batch(conn: Connection, batch: HistoricalBatch, source_bytes: bytes) -
         if source["qualification_state"] != "staged":
             raise ValueError("source_no_longer_staged")
         source_id = source["id"]
+        prior_rows = conn.execute(
+            """SELECT wellbore_id,source_record_id,revision,operation,
+                      observed_at,available_at,received_at,md_m,tvd_m,
+                      depth_reference_id,rig_state,quality,source_quality_code,
+                      rop_m_per_h,wob_kn,rpm,torque_kn_m,flow_in_l_per_min,
+                      mud_density_kg_per_m3,raw_values
+               FROM drilling_parameter_sample WHERE source_id=%s""",
+            (source_id,),
+        ).fetchall()
     else:
         source_id = uuid4()
+        prior_rows = []
+    # Screen the full effective state, including staged correction history.
+    # No insert happens unless every wellbore still passes.
+    from nwis.telemetry_screen import screen_batch
+
+    report = screen_batch(
+        [HistoricalSample.model_validate(row) for row in prior_rows] + batch.samples
+    )
+    if report["decision"] == "stop":
+        raise DrillingScreenError(report)
+    if not existing:
         conn.execute(
             """INSERT INTO drilling_parameter_source
                (id,dataset_id,external_id,source_sha256,source_kind,source_reference,
@@ -192,10 +218,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Stage historical drilling parameters")
     parser.add_argument("--source-file", required=True, type=Path)
     parser.add_argument("--batch", required=True, type=Path)
+    parser.add_argument("--screen-only", action="store_true")
     args = parser.parse_args()
     batch = HistoricalBatch.model_validate_json(args.batch.read_text())
+    source_bytes = args.source_file.read_bytes()
+    if hashlib.sha256(source_bytes).hexdigest() != batch.source_sha256:
+        parser.error("source checksum does not match batch")
+    if args.screen_only:
+        from nwis.telemetry_screen import screen_batch
+
+        report = screen_batch(batch.samples)
+        print(json.dumps(report, sort_keys=True))
+        if report["decision"] == "stop":
+            raise SystemExit(2)
+        return
     with connection() as conn:
-        result = stage_batch(conn, batch, args.source_file.read_bytes())
+        try:
+            result = stage_batch(conn, batch, source_bytes)
+        except DrillingScreenError as exc:
+            print(json.dumps(exc.report, sort_keys=True))
+            raise SystemExit(2) from exc
     print(json.dumps(result, sort_keys=True))
 
 
