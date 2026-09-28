@@ -21,13 +21,13 @@ cannot conceal a completion/workover interval in another. This is a
 wellbore-level gate (more conservative than grouping sidetracks by physical
 well), not an operator-reviewed drilling-state classification.
 
-`drilling-ahead-screen-v1` reports current-row count, span, good five-channel
+`drilling-ahead-screen-v2` reports current-row count, span, good five-channel
 completeness, rig-state and quality distributions, active rows (ROP >0.5 m/h
 and WOB >2 kN), ROP/WOB ranges, measured-depth advancement, regressions,
 duplicate timestamps and largest/median gaps. Its explicit initial stop rules
 require at least 30 rows spanning 10 minutes, 80% good complete channels,
 10 active forward-drilling rows, ROP range at least 1 m/h, WOB range at least
-2 kN, 5 m of MD advancement over at least five increasing steps, and no gap
+2 kN, 5 m of net MD advancement over at least five steps greater than 0.01 m, and no gap
 over 30 minutes, duplicate observation time or >1 m forward-drilling MD
 regression. These are **conservative screening heuristics, not validated
 engineering thresholds**. A stop means inspect the source/period and mapping;

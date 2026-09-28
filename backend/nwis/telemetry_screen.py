@@ -10,13 +10,14 @@ from typing import Iterable
 
 from nwis.drilling_parameters import HistoricalSample
 
-SCREEN_VERSION = "drilling-ahead-screen-v1"
+SCREEN_VERSION = "drilling-ahead-screen-v2"
 MIN_ROWS = 30
 MIN_DURATION_MINUTES = 10
 MIN_COMPLETE_FRACTION = 0.8
 MIN_ACTIVE_ROWS = 10
 MIN_DEPTH_ADVANCE_M = 5.0
 MIN_ADVANCING_STEPS = 5
+MIN_ADVANCING_STEP_M = 0.01
 MAX_GAP_MINUTES = 30
 CHANNELS = ("rop_m_per_h", "wob_kn", "rpm", "torque_kn_m", "flow_in_l_per_min")
 
@@ -61,7 +62,7 @@ def screen_wellbore(samples: Iterable[HistoricalSample], wellbore_id: str) -> di
         depths = [row.md_m for row in forward]
         depth_advance = max(0.0, depths[-1] - depths[0])
         differences = [later - earlier for earlier, later in zip(depths, depths[1:])]
-        advancing_steps = sum(diff > 0.1 for diff in differences)
+        advancing_steps = sum(diff > MIN_ADVANCING_STEP_M for diff in differences)
         depth_regressions = sum(diff < -1 for diff in differences)
     if depth_advance < MIN_DEPTH_ADVANCE_M or advancing_steps < MIN_ADVANCING_STEPS:
         blockers.append("no_sustained_measured_depth_advance")
@@ -122,6 +123,7 @@ def screen_batch(samples: Iterable[HistoricalSample]) -> dict:
             "min_active_drilling_rows": MIN_ACTIVE_ROWS,
             "min_depth_advance_m": MIN_DEPTH_ADVANCE_M,
             "min_advancing_steps": MIN_ADVANCING_STEPS,
+            "min_advancing_step_m": MIN_ADVANCING_STEP_M,
             "max_gap_minutes": MAX_GAP_MINUTES,
         },
         "note": "Screen only; not engineering qualification, event coverage, or ML authorization.",
