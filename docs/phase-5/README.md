@@ -2,7 +2,7 @@
 
 ## Current capability
 
-No **real-data predictive model** has been trained or deployed. Historical alerts continue to use the Phase 4 evidence rule. The [offline synthetic training rehearsal](synthetic-training-pipeline.md) fits a demo-only logistic artifact without changing the authenticated readiness/current-risk APIs. ML-01 remains unmet; ML-02's unavailable-score path is implemented, not its validated-model path.
+No **real-data predictive model** has been trained or deployed. Historical alerts continue to use the Phase 4 evidence rule. The [offline synthetic training rehearsal](synthetic-training-pipeline.md) fits a demo-only logistic artifact without changing the authenticated readiness/current-risk APIs. A separate [real-data experiment gate](real-ml-approval.md) now exists in software, but no real evidence bundle or approval has passed it. ML-01 remains unmet; ML-02's unavailable-score path is implemented, not its validated-model path.
 
 The first **proposed** task is mud-loss onset in `(anchor MD, anchor MD + 100 m]` during forward drilling. It differs from Phase 4's offset-event lookahead. Prediction excludes events already ongoing at the anchor. Full 100 m observed outcome coverage is required even for positives in this initial contract. No-event labels require reviewed coverage, not merely an absence of report mentions. The horizon and feature choices require domain review.
 
@@ -10,7 +10,7 @@ The first **proposed** task is mud-loss onset in `(anchor MD, anchor MD + 100 m]
 
 Request a permitted, de-identified sample covering multiple physical wells and their sidetracks, with original identities linked consistently, timestamps, MD/datum and units; pre-onset ROP, WOB, RPM, torque, flow-in and mud density; reviewed loss onsets; drilling-state/coverage records; and permission/provenance references. Preserve original geography. Do not send private reports to cloud providers by default.
 
-Feature schema `mud-loss-features-v1`: `rop_m_per_h`, `wob_kn`, `rpm`, `torque_kn_m`, `flow_in_l_per_min`, `mud_density_kg_per_m3`. Values must be finite and nonnegative. These are candidate pre-anchor features, not proven causal predictors. A [FORGE 56-32 telemetry pilot](forge-56-32-source-pilot.md) maps five sensor channels from one public CSV format and screens drilling-ahead intervals; the reviewed source-to-label adapter is **not** implemented. Mud density, source-time availability and future coverage still require independent evidence.
+Feature schema `mud-loss-features-v1`: `rop_m_per_h`, `wob_kn`, `rpm`, `torque_kn_m`, `flow_in_l_per_min`, `mud_density_kg_per_m3`. Values must be finite and nonnegative. These are candidate pre-anchor features, not proven causal predictors. A [FORGE 56-32 telemetry pilot](forge-56-32-source-pilot.md) maps five sensor channels from one public CSV format and screens drilling-ahead intervals. The generic reviewed-assertion adapter and source-backed approval join are implemented, but no actual FORGE/Volve source has all required density, coverage, and adjudicated loss evidence.
 
 ## Local audit
 
@@ -42,7 +42,7 @@ Volve remains a candidate for report/telemetry qualification, not a selected tra
 
 ## Next gates
 
-1. Qualify source files, permissions, coverage, labels and independent well identities; implement a source-specific feature/label adapter and reviewed split manifest.
+1. Qualify source files, permissions, coverage, labels and independent well identities; produce a source-specific reviewed evidence bundle and pass the [experiment gate](real-ml-approval.md).
 2. Freeze one grouped split with chronology preserved. Fit preprocessing only on training wells. Propose a simple logistic baseline/model first; compare with training prevalence. Do not tune on the held-out wells.
 3. Report well/sample counts, class balance, precision/recall/F1, PR-AUC where valid, lead distance and uncertainty. Select thresholds on validation wells. Sample-size adequacy needs separate review.
 4. Calibrate only if data supports it; report calibration evidence before calling scores probabilities. Persist model/version, split and source hashes, feature schema and metrics in a model card.

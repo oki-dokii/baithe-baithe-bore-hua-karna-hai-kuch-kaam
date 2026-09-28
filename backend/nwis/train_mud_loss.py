@@ -184,6 +184,14 @@ def train(manifest: DatasetManifest) -> tuple[dict, dict]:
     unexpected = set(report["blockers"]) - DEMO_BLOCKERS
     if unexpected:
         raise TrainingRefused("manifest_fails_software_structure_gate")
+    return fit_baseline(manifest, report, state=STATE, training_authorized=False)
+
+
+def fit_baseline(
+    manifest: DatasetManifest, report: dict, *, state: str,
+    training_authorized: bool, approval_id: str | None = None,
+) -> tuple[dict, dict]:
+    """Shared deterministic evaluator; caller must enforce its own data-use gate."""
     partitions = {name: rows(manifest, name) for name in ("train", "validation", "test")}
     x_train, y_train = matrix(partitions["train"])
     means, scales = standardizer(x_train)
@@ -196,8 +204,8 @@ def train(manifest: DatasetManifest) -> tuple[dict, dict]:
     prevalence = sum(y_train) / len(y_train)
     baseline = [prevalence] * len(y_test)
     artifact = {
-        "schema_version": "mud-loss-logistic-demo-v1",
-        "state": STATE,
+        "schema_version": "mud-loss-logistic-experiment-v1" if approval_id else "mud-loss-logistic-demo-v1",
+        "state": state,
         "algorithm": "standardized_l2_logistic_batch_gradient_descent",
         "fit_parameters": {"iterations": 1200, "learning_rate": 0.05, "l2": 0.02},
         "feature_schema": "mud-loss-features-v1",
@@ -209,16 +217,17 @@ def train(manifest: DatasetManifest) -> tuple[dict, dict]:
         "threshold": threshold,
         "manifest_sha256": report["manifest_sha256"],
         "source_sha256": manifest.source_sha256,
+        "approval_id": approval_id,
         "split_sample_id_sha256": {name: split_digest(items) for name, items in partitions.items()},
     }
     card = {
-        "state": STATE,
+        "state": state,
         "model_family": "logistic_software_baseline",
         "hazard": "mud_loss",
         "horizon_m": 100,
         "source_kind": manifest.kind,
         "manifest_sha256": report["manifest_sha256"],
-        "training_authorized": False,
+        "training_authorized": training_authorized,
         "operationally_validated": False,
         "deployed": False,
         "calibrated": False,
@@ -240,7 +249,8 @@ def train(manifest: DatasetManifest) -> tuple[dict, dict]:
             "reliability_bins": reliability_bins(y_test, test_scores),
         },
         "limitations": [
-            "Owned synthetic software test, not a real drilling validation",
+            ("Offline approved-source experiment, not an OIL field validation" if approval_id
+             else "Owned synthetic software test, not a real drilling validation"),
             "Tiny windows and repeated samples cannot establish event-level lead time or field alert burden",
             "Reliability bins diagnose scores but do not calibrate them",
             "No trained artifact is loaded by /risk/current or /prediction/readiness",
