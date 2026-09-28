@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { DepthTrack, MitigationGraph, MudWindow, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
+import { DepthTrack, MitigationGraph, MudWindow, OperationalEvidence, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
 import OffsetBrief, { OffsetBriefData } from "./OffsetBrief";
 
 type Well = {
@@ -844,6 +844,7 @@ export default function Intelligence({ token }: { token: string }) {
         )}
       </section>
       {active && <MitigationGraph token={token} datasetId={active.dataset_id} onOpenCase={openCase} />}
+      {active && <OperationalEvidence token={token} datasetId={active.dataset_id} onOpenCase={openCase} />}
       {record && (
         <section className="case-panel" aria-label="Historical event case file">
           <div className="section-heading">

@@ -26,6 +26,14 @@ type Link = {
   event_ids: string[];
 };
 type LinkResponse = { items: Link[]; source_kind: string; truncated: boolean; notice: string };
+type SpecialOperations = { source_kind: string; truncated: boolean; notice: string; items: {
+  event_type: string; sample_count: number; state: string; outcome_counts: Record<string, number>;
+  cases: { event_id: string; formation_name: string; start_md_m: number | null; duration_h: number | null }[];
+}[] };
+type NptExposure = { source_kind: string; currency: string; assumed_rig_day_rate: string;
+  notice: string; truncated: boolean; items: { npt_id: string; event_id: string; event_type: string;
+  formation_name: string; duration_h: number; duration_source: string; illustrative_exposure: number }[] };
+type AssamReference = { source_url: string; notice: string; items: { code: string; name: string; aliases: string[] }[] };
 export type PlanningPoint = { latitude: number; longitude: number };
 type Picture = {
   source_kind: string;
@@ -168,6 +176,79 @@ export function MitigationGraph({ token, datasetId, onOpenCase }: {
       <div><small>RECORDED EFFECTIVENESS</small>{Object.entries(item.effectiveness_counts).map(([status, count]) => <span key={status}>{human(status)} · {count}</span>)}<button className="text-button" onClick={() => onOpenCase(item.event_ids[0])}>Inspect cited case →</button></div>
     </div>)}
     {data?.truncated && <p className="notice">First 500 cited response rows only; narrow the dataset before interpreting counts.</p>}
+  </section>;
+}
+
+export function OperationalEvidence({ token, datasetId, onOpenCase }: {
+  token: string; datasetId: string; onOpenCase: (id: string) => void;
+}) {
+  const [special, setSpecial] = useState<SpecialOperations | null>(null);
+  const [reference, setReference] = useState<AssamReference | null>(null);
+  const [exposure, setExposure] = useState<NptExposure | null>(null);
+  const [rate, setRate] = useState("");
+  const [currency, setCurrency] = useState("INR");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    setSpecial(null); setExposure(null); setError("");
+    get<SpecialOperations>(token, `/knowledge/special-operations?dataset_id=${datasetId}`)
+      .then((value) => { if (live) setSpecial(value); })
+      .catch((cause) => { if (live) setError(cause.message); });
+    get<AssamReference>(token, "/reference/assam-formations")
+      .then((value) => { if (live) setReference(value); })
+      .catch((cause) => { if (live) setError(cause.message); });
+    return () => { live = false; };
+  }, [token, datasetId]);
+  async function calculate(event: FormEvent) {
+    event.preventDefault(); setError(""); setExposure(null);
+    try {
+      const result = await get<NptExposure>(token, "/knowledge/npt-exposure", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataset_id: datasetId, rig_day_rate: rate, currency }),
+      });
+      setExposure(result);
+    } catch (cause) { setError((cause as Error).message); }
+  }
+  return <section className="explore-panel" aria-label="Special operations and illustrative NPT exposure">
+    <div className="section-heading"><div><p className="eyebrow">Operations ledger</p><h2>What the cited record actually says.</h2></div><span>{special?.source_kind ?? "—"}</span></div>
+    <p className="footnote">Fishing and cementing are shown only from approved, cited events. A small sample is marked insufficient, not turned into a success rate.</p>
+    {error && <p role="alert" className="error">{error}</p>}
+    {!special && !error && <p role="status">Loading reviewed operations…</p>}
+    <div className="operations-grid">{special?.items.map((group) => <article key={group.event_type}>
+      <small>{human(group.event_type).toUpperCase()}</small>
+      <h3>{group.sample_count} cited {group.sample_count === 1 ? "case" : "cases"}</h3>
+      {group.state === "insufficient" ? <p>Insufficient (n={group.sample_count}); outcome distribution withheld.</p>
+        : <p>{Object.entries(group.outcome_counts).map(([outcome, count]) => `${human(outcome)} ${count}`).join(" · ")}</p>}
+      {group.cases.slice(0, 12).map((item) => <button key={item.event_id} className="text-button" onClick={() => onOpenCase(item.event_id)}>
+        {item.formation_name} · {item.start_md_m ?? "?"} m MD{item.duration_h != null ? ` · ${item.duration_h} h` : ""} ↗
+      </button>)}
+      {group.cases.length > 12 && <p className="footnote">First 12 cases shown here.</p>}
+    </article>)}</div>
+    {special?.truncated && <p className="notice">Results capped at 200 events; counts are incomplete.</p>}
+    <div className="operations-divider" />
+    <div className="section-heading"><div><p className="eyebrow">Assumption desk</p><h2>Illustrative NPT exposure.</h2></div><span>No OIL rate assumed</span></div>
+    <p className="footnote">Enter your own rig-day rate. Each cited duration is calculated separately; overlapping episodes are not summed, and these figures are not proven savings.</p>
+    <form className="planning-controls" onSubmit={calculate}>
+      <label>Rig-day rate <input aria-label="Assumed rig-day rate" type="number" min="0.01" max="999999999999.99" step="0.01" required value={rate} onChange={(e) => { setRate(e.target.value); setExposure(null); }} /></label>
+      <label>Currency <select aria-label="Currency" value={currency} onChange={(e) => { setCurrency(e.target.value); setExposure(null); }}><option>INR</option><option>USD</option></select></label>
+      <button>Calculate per episode →</button>
+    </form>
+    {exposure && <div className="operations-grid">{exposure.items.length ? exposure.items.map((item) => <article key={item.npt_id}>
+      <small>{human(item.event_type).toUpperCase()} / {item.formation_name}</small>
+      <h3>{new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(item.illustrative_exposure)} {exposure.currency}</h3>
+      <p>{item.duration_h} h · {human(item.duration_source)} duration</p>
+      <button className="text-button" onClick={() => onOpenCase(item.event_id)}>Inspect cited case →</button>
+    </article>) : <p className="notice">No approved cited event with a recorded NPT duration.</p>}
+      {exposure.truncated && <p className="notice">First 200 events only; no dataset total is calculated.</p>}
+    </div>}
+    {exposure && <p className="footnote">{exposure.notice}</p>}
+    {reference && <details className="formation-reference"><summary>Upper Assam formation name reference</summary>
+      <p>{reference.notice} These names are not hazard or depth claims.</p>
+      <div className="operations-grid">{reference.items.map((item) => <article key={item.code}>
+        <strong>{item.name}</strong><p>Exact-name forms: {item.aliases.join(" · ")}</p>
+      </article>)}</div>
+      <a href={reference.source_url} target="_blank" rel="noreferrer">Oil India regional source ↗</a>
+    </details>}
   </section>;
 }
 

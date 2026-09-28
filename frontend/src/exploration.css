@@ -17,6 +17,15 @@
 .response-link span { color: var(--muted); }
 .response-link .response-arrow { color: var(--accent); font: 24px Georgia, serif; }
 .response-link button { justify-self: start; }
+.operations-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0; }
+.operations-grid article { border: 1px solid var(--line); background: #fffefb; padding: 16px; }
+.operations-grid article small { font: 10px monospace; color: var(--muted); letter-spacing: .08em; }
+.operations-grid article h3 { margin: 8px 0; font: 400 22px Georgia, serif; }
+.operations-grid article p { font-size: 12px; color: var(--muted); }
+.operations-grid .text-button { display: block; text-align: left; margin-top: 8px; }
+.operations-divider { border-top: 1px solid var(--line); margin: 28px 0; }
+.formation-reference { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.formation-reference summary { cursor: pointer; font-weight: 600; }
 .planning-controls { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 20px; }
 .planning-controls label { display: grid; gap: 5px; font-size: 11px; }
 .planning-controls label:has(input[type=checkbox]) { display: flex; align-items: center; }
