@@ -13,6 +13,7 @@ Use this as a ~75-second SIH spoken pitch. “Real” below means the input repo
 1. **Real documents in, staged:** show the public-report registry/preview (three pinned Norwegian reports, 262 pages, 54 initial drafts). Say “authentic public source, not OIL offsets; staged, not operationally approved.” Do not show source PDFs outside permitted local use or claim a real-report accuracy score.
 2. **Cited review:** open the owned synthetic report candidate, inspect the page/citation, approve with the reviewer role, then open its case. Mention document and page remain attached, and unapproved drafts are excluded from search/alerts.
 3. **One cautious alert:** on synthetic `SYN-A`, show `SYN-B` within 5 km, mapped 2130–2140 m, no alert at 2029 m, one at 2030 m. Point to the supporting page and `risk_score: null / model_not_available`.
+   If showing the atlas, call its 993 m result **pairwise bottom-hole separation for reviewed synthetic surveys**. Nearby candidates are still selected by surface radius; this is not trajectory-aware search or anti-collision clearance. The printable offset brief is a bounded, cited handover aid, not a recommendation.
 4. **Refusal moment:** show the no-support query's abstention and the NOD-511 conflict disposition. The answer is “7,733 ft is what the report states; 2,369 m is the summary; later losses near 7,773 ft plausibly explain the difference, but onset is not approved.”
 
 Use the pinned-document view for NOD-511, not a dataset-wide approved count from the older development database: that database also contains owned test events under the source-trial dataset. The pinned NOD PDF itself has two unreviewed drafts and zero approved linked events.
@@ -25,6 +26,7 @@ Use the pinned-document view for NOD-511, not a dataset-wide approved count from
 | Synthetic end-to-end ingest, cited approval, mapping, abstention and one alert passed a fresh-database rehearsal. | “We predict mud loss in OIL wells” or “the alert is field validated.” |
 | The NOD-511 discrepancy is transparently retained and blocked. | “We resolved the onset as 2,369 m” or “7,733 ft was an OCR typo.” |
 | NWIS can show historical response links and an alert budget in replay. | “A mitigation caused the outcome,” “the cap is conformal,” or “critical alerts are safely suppressible.” |
+| The owned vertical synthetic pair displays a version-bound bottom-hole separation. | “We search all offsets by trajectory” or “we performed anti-collision analysis.” |
 
 ## If judges ask about ML or eRTMAC
 
@@ -34,4 +36,14 @@ Use the pinned-document view for NOD-511, not a dataset-wide approved count from
 
 **“Why show a conflict?”** Because a false precision can be worse than an abstention. The report and summary disagree about the loss depth. Showing both with source pages, keeping the event out of alerts, and recording what evidence would unlock it is the safety property we can demonstrate today.
 
-Supporting records: [2026-09-28 rehearsal](rehearsal-2026-09-28.md), [NOD-511 disposition](../phase-2/nod-511-disposition-2026-09-28.md), [public-report ingestion](public-benchmark-ingestion-2026-09-27.md), and [Phase 5 ML gate](../phase-5/README.md).
+**“Why Norwegian reports?”** They are accessible public engineering examples for exercising OCR and review, not local geological analogues for OIL. The three development reports are staged, and the separate two-report holdout is source-sealed but unlabeled. No public-report extraction or retrieval accuracy is claimed. OIL transfer requires authorized OIL records.
+
+**“Why 75/25 similarity weights?”** These are an explicit heuristic over shared reviewed formation and MD-thickness ratio, not fitted coefficients or risk probabilities. Distance only filters the surface-radius candidate set. The display shows the formula and missing components; weights need domain evaluation and ablation on qualified data before stronger claims.
+
+**“Can you use or redistribute those PDFs?”** Local evaluation does not establish every report-specific redistribution right. Raw PDFs/OCR remain ignored and local. A rights decision is required before public demo redistribution or deployment; show metadata and citations only where permitted.
+
+**“What if OCR is wrong?”** OCR confidence is not event confidence. The original page, extracted text and source fields remain linked for reviewer comparison; uncertain unit, depth, datum or text stays flagged. The NOD-511 depth disagreement demonstrates abstention rather than silent correction.
+
+**“Who is accountable for a wrong alert?”** Today alerts are synthetic replay rules with cited evidence and `risk_score: null`; the engineer remains the decision-maker. The audit/decision ledger records system and reviewer actions, but operational accountability, acceptance thresholds, escalation and incident response would need OIL governance before live use. Do not claim this prototype has field safety approval.
+
+Supporting records: [migration-0017 rehearsal](rehearsal-0017-2026-09-28.md), [NOD-511 disposition](../phase-2/nod-511-disposition-2026-09-28.md), [public-report ingestion](public-benchmark-ingestion-2026-09-27.md), [sealed holdout](heldout-review-protocol-2026-09-28.md), and [Phase 5 ML gate](../phase-5/README.md).

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:print": "node --test tests/offset-brief-print.test.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

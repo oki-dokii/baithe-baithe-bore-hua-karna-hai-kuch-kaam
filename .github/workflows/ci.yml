@@ -34,6 +34,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          npm run test:print
           npm audit --audit-level=high
 
   integration:

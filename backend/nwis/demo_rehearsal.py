@@ -17,6 +17,7 @@ from nwis.db import connection
 from nwis.ingestion.jobs import tick
 from nwis.main import app
 from nwis.seed import stable_id
+from nwis.synthetic_survey_demo import attest
 
 
 def checked(response, status=200):
@@ -47,6 +48,10 @@ def rehearse():
         assert seeded["wells"] == 4 and not seeded["repeated"]
         repeated = checked(client.post("/api/v1/admin/fixtures/golden", headers=admin))
         assert repeated["repeated"] and repeated["wells"] == 0
+
+        with connection() as conn:
+            survey_attestation = attest(conn)
+        assert len(survey_attestation["attested_wellbores"]) == 2
 
         dataset = stable_id("dataset", "nwis-synthetic-golden-v1")
         source_bore = stable_id("wellbore", "SYN-B-MAIN")
@@ -122,6 +127,19 @@ def rehearse():
         ]
         assert len(mapped) == 1 and mapped[0]["mapped_start_md_m"] == 2130
         assert mapped[0]["mapped_end_md_m"] == 2140
+        proximity = checked(client.get(
+            f"/api/v1/wellbores/{active_bore}/bottomhole-proximity"
+            f"?offset_wellbore_id={source_bore}", headers=viewer,
+        ))
+        assert proximity["status"] == "resolved"
+        assert proximity["source_scope"] == "owned_synthetic_demo_only"
+        assert proximity["bottomhole_horizontal_distance_m"] > 0
+        brief = checked(client.get(
+            f"/api/v1/wellbores/{active_bore}/offset-brief"
+            f"?target_interval_id={target}&radius_km=5", headers=viewer,
+        ))
+        brief_events = [event for offset in brief["offsets"] for event in offset["events"]]
+        assert any(event["event_id"] == event_id and event["citations"] for event in brief_events)
         query = checked(
             client.post(
                 "/api/v1/query",
@@ -184,6 +202,8 @@ def rehearse():
             "fresh_database_required": True,
             "ingestion_reviewed": True,
             "cited_event": True,
+            "synthetic_bottomhole_pair": True,
+            "cited_offset_brief": True,
             "mapping_m": [2130, 2140],
             "abstention_checked": True,
             "observations": observations,

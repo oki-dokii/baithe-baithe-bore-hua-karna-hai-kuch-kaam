@@ -28,6 +28,7 @@ done
 cd "$nwis_repo_root/backend"
 .venv/bin/python -m nwis.initialize
 .venv/bin/python -m nwis.demo_guard --allow-unindexed
+.venv/bin/python -m nwis.synthetic_survey_demo
 .venv/bin/python -m nwis.semantic index --dataset-id 0075c04f-2395-5617-a2bd-a752e8ce508e
 .venv/bin/python -m nwis.demo_guard
 
