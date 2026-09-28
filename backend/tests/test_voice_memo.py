@@ -1,6 +1,7 @@
 import os
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -15,7 +16,9 @@ from nwis.voice import typed_transcript
 from nwis.voice_retention import purge_expired_audio
 
 
-def test_typed_voice_transcript_preserves_language_without_fake_confidence():
+def test_typed_voice_transcript_preserves_language_without_fake_confidence(monkeypatch):
+    monkeypatch.setattr("nwis.voice.get_settings",
+                        lambda: SimpleNamespace(page_max_characters=30000))
     result = typed_transcript("  Mud losses at 1930 m MD.  ", "en")
     assert result.text == "Mud losses at 1930 m MD."
     assert result.confidence is None
