@@ -11,6 +11,30 @@ cd backend
 .venv/bin/python -m nwis.drilling_parameters --source-file /path/to/permitted-export.csv --batch /path/to/mapped-batch.json
 ```
 
+Run a read-only screen first with the same arguments plus `--screen-only`.
+It prints JSON and exits with status 2 if any wellbore fails. The file checksum
+is checked in both modes. Normal staging runs the same fail-closed screen
+before writing; a correction upload is assessed together with all previously
+staged revisions. A failed screen leaves the database unchanged. A source with
+multiple wellbores is stopped if **any** wellbore fails; passing one interval
+cannot conceal a completion/workover interval in another. This is a
+wellbore-level gate (more conservative than grouping sidetracks by physical
+well), not an operator-reviewed drilling-state classification.
+
+`drilling-ahead-screen-v1` reports current-row count, span, good five-channel
+completeness, rig-state and quality distributions, active rows (ROP >0.5 m/h
+and WOB >2 kN), ROP/WOB ranges, measured-depth advancement, regressions,
+duplicate timestamps and largest/median gaps. Its explicit initial stop rules
+require at least 30 rows spanning 10 minutes, 80% good complete channels,
+10 active forward-drilling rows, ROP range at least 1 m/h, WOB range at least
+2 kN, 5 m of MD advancement over at least five increasing steps, and no gap
+over 30 minutes, duplicate observation time or >1 m forward-drilling MD
+regression. These are **conservative screening heuristics, not validated
+engineering thresholds**. A stop means inspect the source/period and mapping;
+it must not be overridden by relabeling a completion interval as drilling.
+Passing is only `screen_passed_needs_review`, never source qualification,
+reviewed outcome coverage or model-training authorization.
+
 The batch must conform to `HistoricalBatch` in
 `backend/nwis/drilling_parameters.py`. Its `source_sha256` is verified against
 the exact source file bytes. `source_reference` and `permission_reference` must

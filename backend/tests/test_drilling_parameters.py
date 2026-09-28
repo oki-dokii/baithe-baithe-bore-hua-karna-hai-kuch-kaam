@@ -8,7 +8,10 @@ from pydantic import ValidationError
 from psycopg.errors import CheckViolation
 
 from nwis.db import connection
-from nwis.drilling_parameters import HistoricalBatch, eligible_anchors, stage_batch
+from nwis.drilling_parameters import (
+    DrillingScreenError, HistoricalBatch, eligible_anchors, stage_batch,
+)
+from nwis.telemetry_screen import screen_batch
 
 NOW = datetime(2025, 1, 1, tzinfo=timezone.utc)
 RAW = b"owned test export only\n"
@@ -33,7 +36,14 @@ def batch(dataset, bore, **changes):
         "source_kind": "csv_export", "source_reference": "owned test fixture",
         "permission_reference": "owned test fixture", "source_timezone": "UTC",
         "md_datum": "KB", "source_units": {"md": "m", "wob": "kN"},
-        "mapping_version": "test-v1", "samples": [sample(bore)],
+        "mapping_version": "test-v1", "samples": [sample(
+            bore, source_record_id=f"row-{i + 1}",
+            observed_at=NOW + timedelta(seconds=20 * i),
+            available_at=NOW + timedelta(seconds=20 * i + 2),
+            received_at=NOW + timedelta(seconds=20 * i + 3),
+            md_m=500 + i * 0.5, rop_m_per_h=8 + i % 4,
+            wob_kn=45 + i % 5,
+        ) for i in range(40)],
     } | changes)
 
 
@@ -45,6 +55,41 @@ def test_contract_requires_ordered_aware_timestamps_and_no_delete_channels():
         batch(uuid4(), bore, samples=[sample(bore, available_at=NOW - timedelta(seconds=1))])
     with pytest.raises(ValidationError):
         batch(uuid4(), bore, samples=[sample(bore, operation="delete")])
+
+
+def test_non_drilling_slice_stops_before_import():
+    bore = uuid4()
+    rows = batch(uuid4(), bore, samples=[
+        sample(bore, source_record_id=f"row-{i + 1}",
+               observed_at=NOW + timedelta(seconds=20 * i),
+               available_at=NOW + timedelta(seconds=20 * i + 2),
+               received_at=NOW + timedelta(seconds=20 * i + 3),
+               md_m=500, rop_m_per_h=0, wob_kn=0)
+        for i in range(40)
+    ]).samples
+    report = screen_batch(rows)
+    assert report["decision"] == "stop"
+    assert "rop_constant_or_near_zero_variation" in report["wellbores"][0]["blockers"]
+    assert "no_sustained_measured_depth_advance" in report["wellbores"][0]["blockers"]
+    assert screen_batch(batch(uuid4(), bore).samples)["decision"] == "screen_passed_needs_review"
+
+
+def test_gap_and_incomplete_wellbore_stop_entire_export():
+    bore_a, bore_b = uuid4(), uuid4()
+    good = batch(uuid4(), bore_a).samples
+    second = [row.model_copy(update={"wellbore_id": bore_b, "rop_m_per_h": None})
+              for row in good]
+    report = screen_batch(good + second)
+    assert report["decision"] == "stop"
+    assert len(report["wellbores"]) == 2
+    assert any("insufficient_good_channel_completeness" in row["blockers"]
+               for row in report["wellbores"])
+    gap = [row.model_copy(update={
+        "observed_at": row.observed_at + timedelta(hours=1),
+        "available_at": row.available_at + timedelta(hours=1),
+        "received_at": row.received_at + timedelta(hours=1),
+    }) if i >= 20 else row for i, row in enumerate(good)]
+    assert "large_telemetry_gap" in screen_batch(gap)["wellbores"][0]["blockers"]
 
 
 @pytest.mark.skipif(os.getenv("NWIS_INTEGRATION") != "1", reason="Needs initialized NWIS test DB")
@@ -71,10 +116,34 @@ def test_staging_revision_and_fail_closed_qualification():
         source = batch(dataset_id, bore_id)
         with pytest.raises(ValueError, match="checksum"):
             stage_batch(conn, source, b"wrong")
+        non_drilling = batch(dataset_id, bore_id, samples=[
+            sample(bore_id, source_record_id=f"row-{i + 1}",
+                   observed_at=NOW + timedelta(seconds=20 * i),
+                   available_at=NOW + timedelta(seconds=20 * i + 2),
+                   received_at=NOW + timedelta(seconds=20 * i + 3),
+                   md_m=500, rop_m_per_h=0, wob_kn=0)
+            for i in range(40)
+        ])
+        with pytest.raises(DrillingScreenError) as stopped:
+            stage_batch(conn, non_drilling, RAW)
+        assert stopped.value.report["decision"] == "stop"
+        assert conn.execute("SELECT count(*) AS n FROM drilling_parameter_source WHERE dataset_id=%s",
+                            (dataset_id,)).fetchone()["n"] == 0
         result = stage_batch(conn, source, RAW)
-        assert result["staged_rows"] == 1
+        assert result["staged_rows"] == 40
         assert stage_batch(conn, source, RAW)["staged_rows"] == 0
         assert eligible_anchors(conn, result["source_id"]) == []
+        tombstones = [sample(
+            bore_id, source_record_id=f"row-{i + 1}", revision=2,
+            operation="delete", quality="missing", rop_m_per_h=None,
+            wob_kn=None, rpm=None, torque_kn_m=None, flow_in_l_per_min=None,
+        ) for i in range(40)]
+        with pytest.raises(DrillingScreenError):
+            stage_batch(conn, batch(dataset_id, bore_id, samples=tombstones), RAW)
+        assert conn.execute(
+            "SELECT count(*) AS n FROM drilling_parameter_sample WHERE source_id=%s",
+            (result["source_id"],),
+        ).fetchone()["n"] == 40
         correction = sample(bore_id, revision=2, rop_m_per_h=12,
                             depth_reference_id=ref_id)
         corrected = batch(dataset_id, bore_id, samples=[correction])
