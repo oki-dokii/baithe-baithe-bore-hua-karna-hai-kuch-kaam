@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { DepthTrack, MitigationGraph, MudWindow, OperationalEvidence, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
+import { DepthTrack, MudWindow } from "./ExplorationExtras";
 import OffsetBrief, { OffsetBriefData } from "./OffsetBrief";
 
 type Well = {
@@ -13,6 +13,7 @@ type Well = {
   latitude: number;
   longitude: number;
 };
+
 type Interval = {
   id: string;
   formation_id: string;
@@ -23,6 +24,7 @@ type Interval = {
   review_state: string;
   version: number;
 };
+
 type Mapping = {
   event_id: string;
   event_type: string;
@@ -34,6 +36,7 @@ type Mapping = {
   reason: string | null;
   method: string;
 };
+
 type Analogue = Well & {
   surface_distance_m: number;
   bottomhole_horizontal_distance_m?: number;
@@ -46,6 +49,7 @@ type Analogue = Well & {
   mappings: Mapping[];
   events_truncated: boolean;
 };
+
 type Comparison = {
   items: Analogue[];
   target_interval: Interval;
@@ -55,6 +59,7 @@ type Comparison = {
   score_formula: string;
   truncated: boolean;
 };
+
 type BottomholeProximity = {
   status: "resolved" | "unresolved";
   source_scope: "owned_synthetic_demo_only" | "reviewed_dataset_pair";
@@ -63,6 +68,7 @@ type BottomholeProximity = {
   bottomhole_horizontal_distance_m: number | null;
   notice: string;
 };
+
 type Citation = {
   passage_id: string;
   document_id: string;
@@ -74,6 +80,7 @@ type Citation = {
   raw_text?: string;
   representation?: string;
 };
+
 type Case = {
   id: string;
   well_name: string;
@@ -89,28 +96,11 @@ type Case = {
   event_outcome: { id: string; outcome: string }[];
   npt_event: { id: string; duration_h: number }[];
 };
-type SearchResult = {
-  items: {
-    id: string;
-    well_name: string;
-    event_type: string;
-    description: string;
-    citations: Citation[];
-  }[];
-  next_offset: number | null;
-  abstention_reason: string | null;
-  retrieval_mode: string;
-  semantic_model: string | null;
-  notice: string;
-};
-type SearchCapabilities = {
-  full_text: boolean;
-  semantic: boolean;
-  semantic_model: string | null;
-};
+
 const readable = (s: string) => s.replaceAll("_", " ");
 const depth = (v: number | null) =>
   v == null ? "Unknown" : `${Number(v).toFixed(1)} m`;
+
 async function request<T>(
   token: string,
   path: string,
@@ -133,23 +123,20 @@ function WellMap({
   candidates,
   radius,
   proximityBasis,
+  selectedId,
   onSelect,
-  onPlan,
-  planningPoint,
 }: {
   active: Well;
   candidates: Analogue[];
   radius: number;
   proximityBasis: "surface" | "terminal_bottomhole";
+  selectedId: string;
   onSelect: (id: string) => void;
-  onPlan: (point: PlanningPoint) => void;
-  planningPoint: PlanningPoint | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const callback = useRef(onSelect);
   callback.current = onSelect;
-  const planCallback = useRef(onPlan);
-  planCallback.current = onPlan;
+
   useEffect(() => {
     if (!root.current) return;
     const map = L.map(root.current, {
@@ -158,18 +145,21 @@ function WellMap({
       scrollWheelZoom: false,
       attributionControl: false,
     });
-    map.on("click", (event) => planCallback.current({ latitude: event.latlng.lat, longitude: event.latlng.lng }));
-    if (planningPoint) L.circleMarker([planningPoint.latitude, planningPoint.longitude], {
-      radius: 8, color: "#a05d3c", fillColor: "#fffefb", weight: 3, fillOpacity: 1,
-    }).addTo(map).bindTooltip("Hypothetical planning point");
+
     const bounds = proximityBasis === "surface"
       ? L.circle([active.latitude, active.longitude], {
-          radius: radius * 1000, color: "#78896d", weight: 1,
-          dashArray: "4 6", fillColor: "#e1e8d9", fillOpacity: 0.45,
+          radius: radius * 1000,
+          color: "#78896d",
+          weight: 1.5,
+          dashArray: "4 6",
+          fillColor: "#e1e8d9",
+          fillOpacity: 0.35,
         }).addTo(map).getBounds()
       : L.latLngBounds([active, ...candidates].map((well) => [well.latitude, well.longitude]));
+
     if (bounds.isValid() && (proximityBasis === "surface" || candidates.length))
       map.fitBounds(bounds.pad(0.15), { padding: [35, 35], maxZoom: 13 });
+
     const gridBounds = bounds.pad(0.5);
     const step = Math.max(
       0.002,
@@ -178,6 +168,7 @@ function WellMap({
         Math.floor(Math.log10(Math.max(0.01, gridBounds.getNorth() - gridBounds.getSouth()) / 5)),
       ),
     );
+
     for (
       let lat = Math.floor(gridBounds.getSouth() / step) * step;
       lat <= gridBounds.getNorth();
@@ -190,6 +181,7 @@ function WellMap({
         ],
         { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
       ).addTo(map);
+
     for (
       let lon = Math.floor(gridBounds.getWest() / step) * step;
       lon <= gridBounds.getEast();
@@ -202,35 +194,42 @@ function WellMap({
         ],
         { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
       ).addTo(map);
+
     for (const [index, well] of [active, ...candidates].entries()) {
       const current = well.id === active.id;
+      const isSelected = well.id === selectedId;
       const label = document.createElement("span");
-      label.textContent = `${well.name}${current ? " · active" : ""}`;
-      L.circleMarker([well.latitude, well.longitude], {
-        radius: current ? 9 : 7,
-        fillColor: current ? "#272c27" : "#617650",
-        color: "#fbfaf5",
-        weight: 2,
+      label.textContent = `${well.name}${current ? " · active" : isSelected ? " · selected" : ""}`;
+      
+      const marker = L.circleMarker([well.latitude, well.longitude], {
+        radius: current ? 10 : isSelected ? 9 : 7,
+        fillColor: current ? "#272c27" : isSelected ? "#3a8274" : "#617650",
+        color: isSelected ? "#52b7a5" : "#fbfaf5",
+        weight: isSelected ? 3 : 2,
         fillOpacity: 1,
       })
         .addTo(map)
         .bindTooltip(label, {
-          permanent: true,
+          permanent: current || isSelected,
           direction: current ? "left" : index % 2 ? "top" : "bottom",
           offset: current ? [-9, 0] : index % 2 ? [0, -9] : [0, 9],
-        })
-        .on("click", () => {
-          if (!current) callback.current(well.id);
         });
+
+      if (!current) {
+        marker.on("click", () => callback.current(well.id));
+      }
     }
+
     L.control.scale({ imperial: false }).addTo(map);
     const observer = new ResizeObserver(() => map.invalidateSize());
     observer.observe(root.current);
+
     return () => {
       observer.disconnect();
       map.remove();
     };
-  }, [active, candidates, radius, proximityBasis, planningPoint]);
+  }, [active, candidates, radius, proximityBasis, selectedId]);
+
   return (
     <div
       className="well-map"
@@ -253,30 +252,20 @@ export default function Intelligence({ token }: { token: string }) {
   const [brief, setBrief] = useState<OffsetBriefData | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [selected, setSelected] = useState("");
-  const [planningPoint, setPlanningPoint] = useState<PlanningPoint | null>(null);
+  const [exploreView, setExploreView] = useState<"atlas" | "subsurface">("atlas");
+
+  // Case details
   const [record, setRecord] = useState<Case | null>(null);
   const [source, setSource] = useState<Citation | null>(null);
-  const [question, setQuestion] = useState("");
-  const [searchMode, setSearchMode] = useState<"full_text" | "semantic">("full_text");
-  const [searchCapabilities, setSearchCapabilities] = useState<SearchCapabilities | null>(null);
-  const [hazard, setHazard] = useState("");
-  const [minimum, setMinimum] = useState("");
-  const [maximum, setMaximum] = useState("");
-  const [sameFormation, setSameFormation] = useState(false);
-  const [results, setResults] = useState<SearchResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [searching, setSearching] = useState(false);
+
   const active = wells.find((w) => w.id === activeId);
   const candidate = comparison?.items.find((w) => w.id === selected);
-  const requestSequence = useRef(0);
   const caseSequence = useRef(0);
 
   useEffect(() => {
     let live = true;
-    request<SearchCapabilities>(token, "/search-capabilities")
-      .then((data) => live && setSearchCapabilities(data))
-      .catch(() => live && setSearchCapabilities(null));
     request<{ items: Well[] }>(token, "/intelligence/wellbores")
       .then((data) => {
         if (live) {
@@ -293,6 +282,7 @@ export default function Intelligence({ token }: { token: string }) {
       live = false;
     };
   }, [token]);
+
   useEffect(() => {
     let live = true;
     setIntervals([]);
@@ -300,8 +290,6 @@ export default function Intelligence({ token }: { token: string }) {
     setComparison(null);
     setRecord(null);
     setSource(null);
-    setResults(null);
-    setPlanningPoint(null);
     caseSequence.current++;
     if (activeId)
       request<{ intervals: Interval[] }>(
@@ -322,6 +310,7 @@ export default function Intelligence({ token }: { token: string }) {
       live = false;
     };
   }, [token, activeId]);
+
   useEffect(() => {
     let live = true;
     setComparison(null);
@@ -355,6 +344,7 @@ export default function Intelligence({ token }: { token: string }) {
       clearTimeout(timer);
     };
   }, [token, activeId, intervalId, radius, proximityBasis]);
+
   useEffect(() => {
     let live = true;
     setBottomhole(null);
@@ -366,11 +356,7 @@ export default function Intelligence({ token }: { token: string }) {
     }
     return () => { live = false; };
   }, [token, activeId, selected]);
-  useEffect(() => {
-    setResults(null);
-    requestSequence.current++;
-    setSearching(false);
-  }, [question, hazard, minimum, maximum, sameFormation, activeId, intervalId]);
+
   async function openCase(id: string) {
     const sequence = ++caseSequence.current;
     setRecord(null);
@@ -383,6 +369,7 @@ export default function Intelligence({ token }: { token: string }) {
       if (sequence === caseSequence.current) setError((e as Error).message);
     }
   }
+
   async function openSource(citation: Citation) {
     if (!record) return;
     const sequence = ++caseSequence.current;
@@ -397,46 +384,7 @@ export default function Intelligence({ token }: { token: string }) {
       if (sequence === caseSequence.current) setError((e as Error).message);
     }
   }
-  async function search(event?: FormEvent, offset = 0) {
-    event?.preventDefault();
-    if (!active) return;
-    if (minimum !== "" && maximum !== "" && Number(minimum) > Number(maximum)) {
-      setError("Depth range is reversed.");
-      return;
-    }
-    const sequence = ++requestSequence.current;
-    setSearching(true);
-    setError("");
-    try {
-      const data = await request<SearchResult>(token, "/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dataset_id: active.dataset_id,
-          question,
-          mode: searchMode,
-          hazard: hazard || null,
-          formation_id: sameFormation
-            ? intervals.find((i) => i.id === intervalId)?.formation_id
-            : null,
-          min_md_m: minimum === "" ? null : Number(minimum),
-          max_md_m: maximum === "" ? null : Number(maximum),
-          limit: searchMode === "semantic" ? 5 : 10,
-          offset,
-        }),
-      });
-      if (sequence === requestSequence.current)
-        setResults((previous) =>
-          offset && previous
-            ? { ...data, items: [...previous.items, ...data.items] }
-            : data,
-        );
-    } catch (e) {
-      if (sequence === requestSequence.current) setError((e as Error).message);
-    } finally {
-      if (sequence === requestSequence.current) setSearching(false);
-    }
-  }
+
   async function prepareBrief() {
     if (!activeId || !intervalId) return;
     setBriefLoading(true);
@@ -451,11 +399,13 @@ export default function Intelligence({ token }: { token: string }) {
       setBriefLoading(false);
     }
   }
+
   return (
     <section className="intelligence-workspace">
+      {/* Workspace Header */}
       <div className="archive-heading">
         <div>
-          <p className="eyebrow">02 / The offset atlas</p>
+          <p className="eyebrow">01 / The offset atlas</p>
           <h1>Nearby is a starting point.</h1>
           <p>
             Compare the formation. Read the history. Keep the evidence in view.
@@ -465,11 +415,14 @@ export default function Intelligence({ token }: { token: string }) {
           {active?.data_kind ?? "No dataset"} · NO PREDICTIVE MODEL
         </span>
       </div>
+
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
+
+      {/* Atlas Search & Comparison Controls */}
       <div className="atlas-controls">
         <div>
           <label htmlFor="atlas-active">Active wellbore</label>
@@ -503,14 +456,19 @@ export default function Intelligence({ token }: { token: string }) {
         </div>
         <div>
           <label htmlFor="atlas-basis">Proximity basis</label>
-          <select id="atlas-basis" value={proximityBasis}
-            onChange={(e) => setProximityBasis(e.target.value as "surface" | "terminal_bottomhole")}>
+          <select
+            id="atlas-basis"
+            value={proximityBasis}
+            onChange={(e) => setProximityBasis(e.target.value as "surface" | "terminal_bottomhole")}
+          >
             <option value="surface">Surface wellhead</option>
             <option value="terminal_bottomhole">Reviewed terminal position</option>
           </select>
         </div>
         <div>
-          <label htmlFor="atlas-radius">{proximityBasis === "surface" ? "Surface" : "Terminal"} radius · {radius} km</label>
+          <label htmlFor="atlas-radius">
+            {proximityBasis === "surface" ? "Surface" : "Terminal"} radius · {radius} km
+          </label>
           <input
             id="atlas-radius"
             type="range"
@@ -522,348 +480,264 @@ export default function Intelligence({ token }: { token: string }) {
           />
         </div>
       </div>
+
       {loading && (
         <p role="status">Finding offset wells and checking depth context…</p>
       )}
+
       {!intervalId && (
         <p className="notice">
           A reviewed formation interval is required for geological comparison.
           No depth mapping is inferred from location alone.
         </p>
       )}
+
       {active && comparison && (
         <>
-          <p className="notice">{comparison.proximity_notice} Map markers show surface wellheads.
+          <p className="notice">
+            {comparison.proximity_notice} Map markers show surface wellheads.
             {comparison.excluded_unresolved_survey_count > 0 &&
               ` ${comparison.excluded_unresolved_survey_count} candidate(s) excluded for unresolved survey geometry.`}
           </p>
+
           <div className="brief-actions">
             <button type="button" onClick={prepareBrief} disabled={briefLoading}>
               {briefLoading ? "Preparing cited brief…" : "Prepare one-page offset brief"}
             </button>
             {brief && <button type="button" onClick={() => window.print()}>Print / save as PDF</button>}
           </div>
+
           {brief && <OffsetBrief data={brief} />}
-          <div className="atlas-grid">
-            <div className="map-frame">
-              <WellMap
-                active={active}
-                candidates={comparison.items}
-                radius={radius}
-                proximityBasis={proximityBasis}
-                onSelect={id => { setSelected(id); setRecord(null); setSource(null); caseSequence.current++; }}
-                onPlan={setPlanningPoint}
-                planningPoint={planningPoint}
-              />
-              <div className="map-caption">
-                <span>
-                  WGS84 · {active.latitude.toFixed(4)}°,{" "}
-                  {active.longitude.toFixed(4)}°
-                </span>
-                <span>Click the map to inspect a hypothetical point · no terrain tiles</span>
-              </div>
-            </div>
-            <aside className="analogue-index">
-              <div className="panel-heading">
-                <h2>Offset wells</h2>
-                <span className="mono">
-                  {comparison.items.length} IN {proximityBasis === "surface" ? "SURFACE" : "TERMINAL"} RADIUS
-                </span>
-              </div>
-              {comparison.items.length ? (
-                comparison.items.map((w) => (
-                  <button
-                    key={w.id}
-                    onClick={() => {
-                      setSelected(w.id);
+
+          {/* Subview Toggle */}
+          <div className="subview-tab-bar" role="tablist" aria-label="Explore views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={exploreView === "atlas"}
+              className={`subview-tab-btn ${exploreView === "atlas" ? "active" : ""}`}
+              onClick={() => setExploreView("atlas")}
+            >
+              <span className="tab-num">01</span>
+              <span className="tab-title">Offset Atlas & Analogues</span>
+              <span className="tab-desc">Geographic map & incident mappings</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={exploreView === "subsurface"}
+              className={`subview-tab-btn ${exploreView === "subsurface" ? "active" : ""}`}
+              onClick={() => setExploreView("subsurface")}
+            >
+              <span className="tab-num">02</span>
+              <span className="tab-title">Subsurface Logs</span>
+              <span className="tab-desc">Depth register & pore pressure envelope</span>
+            </button>
+          </div>
+
+          {/* Subview 1: The Offset Atlas Grid & Selected Analogue Comparison */}
+          {exploreView === "atlas" && (
+            <>
+              <div className="atlas-grid">
+                <div className="map-frame">
+                  <WellMap
+                    active={active}
+                    candidates={comparison.items}
+                    radius={radius}
+                    proximityBasis={proximityBasis}
+                    selectedId={selected}
+                    onSelect={(id) => {
+                      setSelected(id);
                       setRecord(null);
                       setSource(null);
                       caseSequence.current++;
                     }}
-                    className={`analogue-row ${selected === w.id ? "selected" : ""}`}
-                  >
-                    <strong>{w.name}</strong>
-                    <span>{((proximityBasis === "terminal_bottomhole" ? w.bottomhole_horizontal_distance_m : w.surface_distance_m)! / 1000).toFixed(2)} km</span>
-                    <small>
-                      Similarity {(w.similarity_score * 100).toFixed(0)} / 100 ·
-                      not risk
-                    </small>
-                    <small>
-                      {w.components.same_reviewed_formation
-                        ? "Shared reviewed formation"
-                        : "Different / unreviewed formation"}
-                    </small>
-                  </button>
-                ))
-              ) : (
-                <p className="index-empty">
-                  No eligible offset wells within this radius.
-                </p>
-              )}
-            </aside>
-          </div>
-          {comparison.truncated && (
-            <p className="notice">
-              Showing the nearest 100 eligible wellbores only. Narrow the radius.
-            </p>
-          )}
-          <PlanningPanel token={token} datasetId={active.dataset_id} point={planningPoint}
-            radius={radius} formationId={intervals.find((item) => item.id === intervalId)?.formation_id ?? null}
-            onOpenCase={openCase} />
-          <DepthTrack token={token} wellboreId={activeId} onOpenCase={openCase} />
-          <MudWindow token={token} wellboreId={activeId} />
-          {candidate && (
-            <section className="comparison-panel">
-              <div className="section-heading">
-                <h2>
-                  {candidate.name} → {active.name}
-                </h2>
-                <span>
-                  Formation-relative comparison ·{" "}
-                  {comparison.target_interval.datum}
-                </span>
-              </div>
-              <p className="footnote">{comparison.score_formula}</p>
-              <p className="footnote">
-                {proximityBasis === "surface" ? "Surface-selected pair" : "Terminal-position-selected pair"} · bottom-hole horizontal separation: {bottomhole?.status === "resolved"
-                  ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
-                  : "unavailable"}. {bottomhole?.status === "unresolved"
-                  ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
-                  : ""}
-                {bottomhole?.source_scope === "owned_synthetic_demo_only" ? "Owned synthetic geometry only. " : ""}
-                {bottomhole?.notice ?? "Requires a reviewed true-north survey on both wells."}
-              </p>
-              <div className="score-explanation">
-                <span>
-                  Shared formation:{" "}
-                  {candidate.components.same_reviewed_formation ? "yes" : "no"}
-                </span>
-                <span>
-                  MD-thickness ratio:{" "}
-                  {candidate.components.md_thickness_similarity == null
-                    ? "unknown"
-                    : candidate.components.md_thickness_similarity.toFixed(2)}
-                </span>
-                <span>
-                  Not included:{" "}
-                  {candidate.missing_components.map(readable).join(", ")}
-                </span>
-              </div>
-              <h3>Approved historical incidents</h3>
-              {candidate.mappings.length ? (
-                <div className="mapping-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Incident</th>
-                        <th>Historical MD</th>
-                        <th>Mapped active MD</th>
-                        <th>Evidence</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {candidate.mappings.map((m) => (
-                        <tr key={m.event_id}>
-                          <td>{readable(m.event_type)}</td>
-                          <td>
-                            {depth(m.source_start_md_m)}–
-                            {depth(m.source_end_md_m)}
-                          </td>
-                          <td>
-                            {m.status === "resolved" ? (
-                              `${depth(m.mapped_start_md_m)}–${depth(m.mapped_end_md_m)}`
-                            ) : (
-                              <span className="unresolved">
-                                Unresolved: {readable(m.reason ?? "unknown")}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <button
-                              className="text-button"
-                              onClick={() => openCase(m.event_id)}
-                            >
-                              Open case →
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  />
+                  <div className="map-caption">
+                    <span>
+                      WGS84 · {active.latitude.toFixed(4)}°,{" "}
+                      {active.longitude.toFixed(4)}°
+                    </span>
+                    <span>Click markers to compare offset analogues within {radius} km</span>
+                  </div>
                 </div>
-              ) : (
+
+                <aside className="analogue-index">
+                  <div className="panel-heading">
+                    <h2>Offset wells</h2>
+                    <span className="mono">
+                      {comparison.items.length} IN {proximityBasis === "surface" ? "SURFACE" : "TERMINAL"} RADIUS
+                    </span>
+                  </div>
+                  {comparison.items.length ? (
+                    comparison.items.map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => {
+                          setSelected(w.id);
+                          setRecord(null);
+                          setSource(null);
+                          caseSequence.current++;
+                        }}
+                        className={`analogue-row ${selected === w.id ? "selected" : ""}`}
+                      >
+                        <strong>{w.name}</strong>
+                        <span>
+                          {((proximityBasis === "terminal_bottomhole"
+                            ? w.bottomhole_horizontal_distance_m
+                            : w.surface_distance_m)! / 1000).toFixed(2)} km
+                        </span>
+                        <small>
+                          Similarity {(w.similarity_score * 100).toFixed(0)} / 100 · not risk
+                        </small>
+                        <small>
+                          {w.components.same_reviewed_formation
+                            ? "Shared reviewed formation"
+                            : "Different / unreviewed formation"}
+                        </small>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="index-empty">
+                      No eligible offset wells within this radius.
+                    </p>
+                  )}
+                </aside>
+              </div>
+
+              {comparison.truncated && (
                 <p className="notice">
-                  No approved incidents to compare. This is not evidence of a
-                  risk-free well.
+                  Showing the nearest 100 eligible wellbores only. Narrow the radius.
                 </p>
               )}
-              {candidate.events_truncated && (
-                <p className="notice">
-                  Only the first 100 approved events are shown.
-                </p>
+
+              {/* Selected Candidate Detailed Comparison */}
+              {candidate && (
+                <section className="comparison-panel">
+                  <div className="section-heading">
+                    <h2>
+                      {candidate.name} → {active.name}
+                    </h2>
+                    <span>
+                      Formation-relative comparison ·{" "}
+                      {comparison.target_interval.datum}
+                    </span>
+                  </div>
+                  <p className="footnote">{comparison.score_formula}</p>
+                  <p className="footnote">
+                    {proximityBasis === "surface"
+                      ? "Surface-selected pair"
+                      : "Terminal-position-selected pair"}{" "}
+                    · bottom-hole horizontal separation:{" "}
+                    {bottomhole?.status === "resolved"
+                      ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
+                      : "unavailable"}.{" "}
+                    {bottomhole?.status === "unresolved"
+                      ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
+                      : ""}
+                    {bottomhole?.source_scope === "owned_synthetic_demo_only"
+                      ? "Owned synthetic geometry only. "
+                      : ""}
+                    {bottomhole?.notice ??
+                      "Requires a reviewed true-north survey on both wells."}
+                  </p>
+                  <div className="score-explanation">
+                    <span>
+                      Shared formation:{" "}
+                      {candidate.components.same_reviewed_formation ? "yes" : "no"}
+                    </span>
+                    <span>
+                      MD-thickness ratio:{" "}
+                      {candidate.components.md_thickness_similarity == null
+                        ? "unknown"
+                        : candidate.components.md_thickness_similarity.toFixed(2)}
+                    </span>
+                    <span>
+                      Not included:{" "}
+                      {candidate.missing_components.map(readable).join(", ")}
+                    </span>
+                  </div>
+
+                  <h3>Approved historical incidents</h3>
+                  {candidate.mappings.length ? (
+                    <div className="mapping-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Incident</th>
+                            <th>Historical MD</th>
+                            <th>Mapped active MD</th>
+                            <th>Evidence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {candidate.mappings.map((m) => (
+                            <tr key={m.event_id}>
+                              <td>{readable(m.event_type)}</td>
+                              <td>
+                                {depth(m.source_start_md_m)}–
+                                {depth(m.source_end_md_m)}
+                              </td>
+                              <td>
+                                {m.status === "resolved" ? (
+                                  `${depth(m.mapped_start_md_m)}–${depth(m.mapped_end_md_m)}`
+                                ) : (
+                                  <span className="unresolved">
+                                    Unresolved: {readable(m.reason ?? "unknown")}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                <button
+                                  className="text-button"
+                                  onClick={() => openCase(m.event_id)}
+                                >
+                                  Open case →
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="notice">
+                      No approved incidents to compare. This is not evidence of a
+                      risk-free well.
+                    </p>
+                  )}
+                  {candidate.events_truncated && (
+                    <p className="notice">
+                      Only the first 100 approved events are shown.
+                    </p>
+                  )}
+                  <p className="footnote">
+                    Mapped depths use a formation-top TVD offset with survey
+                    interpolation, not equal raw MD or a risk prediction. Unresolved
+                    cases must not support alerts.
+                  </p>
+                </section>
               )}
-              <p className="footnote">
-                Mapped depths use a formation-top TVD offset with survey
-                interpolation, not equal raw MD or a risk prediction. Unresolved
-                cases must not support alerts.
-              </p>
-            </section>
+            </>
+          )}
+
+          {/* Subview 2: Subsurface Wellbore Logs */}
+          {exploreView === "subsurface" && (
+            <div className="subsurface-logs-wrapper">
+              <div className="tab-section-intro">
+                <h2>Active Wellbore Subsurface Logs</h2>
+                <p className="footnote">
+                  Correlated formation depth register and pore pressure/fracture gradient envelope for {active.name}.
+                </p>
+              </div>
+              <DepthTrack token={token} wellboreId={activeId} onOpenCase={openCase} />
+              <MudWindow token={token} wellboreId={activeId} />
+            </div>
           )}
         </>
       )}
-      <section className="knowledge-search">
-        <p className="eyebrow">03 / Search the approved record</p>
-        <h2>What has happened before?</h2>
-        <p className="footnote">
-          Search only approved, cited claims in the active well’s dataset. No
-          generated advice. Semantic matches are provisional candidates, not
-          evidence of risk.
-        </p>
-        <form onSubmit={search}>
-          <div className="search-mode" role="group" aria-label="Search method">
-            <button
-              type="button"
-              className={searchMode === "full_text" ? "selected" : ""}
-              aria-pressed={searchMode === "full_text"}
-              onClick={() => { setSearchMode("full_text"); setResults(null); }}
-            >
-              Exact terms
-            </button>
-            <button
-              type="button"
-              className={searchMode === "semantic" ? "selected" : ""}
-              aria-pressed={searchMode === "semantic"}
-              disabled={!searchCapabilities?.semantic}
-              onClick={() => { setSearchMode("semantic"); setResults(null); }}
-            >
-              Related meaning
-            </button>
-            {!searchCapabilities?.semantic && (
-              <span>Local semantic model not prepared</span>
-            )}
-          </div>
-          <div className="search-primary">
-            <label className="sr-only" htmlFor="evidence-query">
-              Search approved evidence
-            </label>
-            <input
-              id="evidence-query"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder='Try "mud losses" or "circulation disappeared"'
-            />
-            <button disabled={!active || searching}>
-              {searching ? "Searching…" : "Find evidence →"}
-            </button>
-          </div>
-          <div className="search-filters">
-            <div>
-              <label htmlFor="search-hazard">Hazard</label>
-              <select
-                id="search-hazard"
-                value={hazard}
-                onChange={(e) => setHazard(e.target.value)}
-              >
-                <option value="">All hazards</option>
-                {[
-                  "mud_loss",
-                  "kick",
-                  "stuck_pipe",
-                  "overpressure",
-                  "torque_spike",
-                  "tight_hole",
-                  "fishing",
-                  "cementing_issue",
-                  "other",
-                ].map((h) => (
-                  <option key={h} value={h}>
-                    {readable(h)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="search-from">Source MD from · m</label>
-              <input
-                id="search-from"
-                type="number"
-                min="0"
-                step="any"
-                value={minimum}
-                onChange={(e) => setMinimum(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="search-to">Source MD to · m</label>
-              <input
-                id="search-to"
-                type="number"
-                min="0"
-                step="any"
-                value={maximum}
-                onChange={(e) => setMaximum(e.target.value)}
-              />
-            </div>
-            <label className="check">
-              <input
-                type="checkbox"
-                disabled={!intervalId}
-                checked={sameFormation}
-                onChange={(e) => setSameFormation(e.target.checked)}
-              />
-              Only the selected formation
-            </label>
-          </div>
-        </form>
-        {results && (
-          <div aria-live="polite">
-            <p className="footnote">
-              {results.retrieval_mode === "local_semantic"
-                ? `Related-meaning candidates · ${results.semantic_model}. ${results.notice}`
-                : `Exact-term matches. ${results.notice}`}
-            </p>
-            {results.items.length ? (
-              results.items.map((r) => (
-                <article className="search-hit" key={r.id}>
-                  <div>
-                    <strong>
-                      {r.well_name} / {readable(r.event_type)}
-                    </strong>
-                    <p>{r.description}</p>
-                    <small>
-                      {r.citations
-                        .map((c) => `${c.filename} · page ${c.page_number}`)
-                        .join("; ")}
-                    </small>
-                  </div>
-                  <button
-                    className="text-button"
-                    onClick={() => openCase(r.id)}
-                  >
-                    Inspect evidence →
-                  </button>
-                </article>
-              ))
-            ) : (
-              <p className="notice">
-                No approved supporting evidence matches these filters. No answer
-                or recommendation is inferred.
-              </p>
-            )}
-            {results.next_offset != null && (
-              <button
-                className="secondary"
-                disabled={searching}
-                onClick={() => search(undefined, results.next_offset!)}
-              >
-                Load more evidence
-              </button>
-            )}
-          </div>
-        )}
-      </section>
-      {active && <MitigationGraph token={token} datasetId={active.dataset_id} onOpenCase={openCase} />}
-      {active && <OperationalEvidence token={token} datasetId={active.dataset_id} onOpenCase={openCase} />}
+
+      {/* Case File Inspection Modal/Drawer */}
       {record && (
         <section className="case-panel" aria-label="Historical event case file">
           <div className="section-heading">

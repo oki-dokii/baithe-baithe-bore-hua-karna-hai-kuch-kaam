@@ -1,6 +1,7 @@
-import { FormEvent, ReactElement, Suspense, lazy, useEffect, useState } from "react";
+import { FormEvent, Suspense, lazy, useEffect, useRef, useState } from "react";
 import Documents from "./Documents";
 const Intelligence = lazy(() => import("./Intelligence"));
+const Analytics = lazy(() => import("./Analytics"));
 import Operations from "./Operations";
 import Prediction from "./Prediction";
 import ReportQuestions from "./ReportQuestions";
@@ -45,7 +46,7 @@ async function getJson<T>(path: string, token: string): Promise<T> {
 }
 
 function StateBadge({ state }: { state: string }) {
-  const cls = `badge badge-${state.toLowerCase()}`;
+  const cls = `badge badge-${state.toLowerCase().replace(/[\s·]/g, "_")}`;
   return <span className={cls}>{state.replaceAll("_", " ")}</span>;
 }
 
@@ -62,6 +63,14 @@ const IconExplore = () => (
     <circle cx="8" cy="7" r="4.5" />
     <path d="M8 11.5V15M5.5 15h5" strokeLinecap="round" />
     <circle cx="8" cy="7" r="1.5" fill="currentColor" stroke="none" />
+  </svg>
+);
+const IconAnalytics = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="4" cy="4.5" r="2" />
+    <circle cx="12" cy="5" r="2" />
+    <circle cx="8" cy="12" r="2" />
+    <path d="M5.6 5.8l4.8 5M6 4.5h4M10.4 6.2L9.2 10.2" strokeLinecap="round" />
   </svg>
 );
 const IconInvestigate = () => (
@@ -98,17 +107,69 @@ const IconDisconnect = () => (
     <path d="M13 3l-2 2" strokeLinecap="round" />
   </svg>
 );
+const IconHelp = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="8" cy="8" r="6.5" />
+    <path d="M6 6c0-1.1.9-2 2-2s2 .9 2 2c0 1.5-2 2-2 2.5M8 12v.5" strokeLinecap="round" />
+  </svg>
+);
+const IconChevronLeft = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M10 12L6 8l4-4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const IconChevronRight = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const IconMenu = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
+  </svg>
+);
+const IconClose = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+  </svg>
+);
 
-type View = "operations" | "documents" | "intelligence" | "foundation" | "prediction" | "questions";
+type View = "operations" | "intelligence" | "analytics" | "questions" | "documents" | "foundation" | "prediction";
 
-const NAV_ITEMS: { id: View; label: string; plate: string; Icon: () => ReactElement }[] = [
-  { id: "operations",  label: "Observe",     plate: "00", Icon: IconObserve },
-  { id: "intelligence",label: "Explore",     plate: "01", Icon: IconExplore },
-  { id: "questions",   label: "Investigate", plate: "02", Icon: IconInvestigate },
-  { id: "documents",   label: "Validate",    plate: "03", Icon: IconValidate },
-  { id: "foundation",  label: "Directory",   plate: "04", Icon: IconDirectory },
-  { id: "prediction",  label: "Evaluate",    plate: "05", Icon: IconEvaluate },
+const NAV_GROUPS = [
+  {
+    label: "Monitor",
+    items: [
+      { id: "operations" as View, label: "Observe", plate: "00", desc: "Live well desk", Icon: IconObserve },
+    ],
+  },
+  {
+    label: "Find evidence",
+    items: [
+      { id: "intelligence" as View, label: "Explore", plate: "01", desc: "Offsets and geology", Icon: IconExplore },
+      { id: "analytics" as View, label: "Correlate", plate: "02", desc: "Response & NPT ledger", Icon: IconAnalytics },
+      { id: "questions" as View, label: "Investigate", plate: "03", desc: "Answers and citations", Icon: IconInvestigate },
+      { id: "documents" as View, label: "Validate", plate: "04", desc: "Review source material", Icon: IconValidate },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { id: "foundation" as View, label: "Directory", plate: "05", desc: "Wells and system", Icon: IconDirectory },
+      { id: "prediction" as View, label: "Evaluate", plate: "06", desc: "Model readiness", Icon: IconEvaluate },
+    ],
+  },
 ];
+
+const VIEW_TITLES: Record<View, string> = {
+  operations: "Observe",
+  intelligence: "Explore",
+  analytics: "Correlate",
+  questions: "Investigate",
+  documents: "Validate",
+  foundation: "Directory",
+  prediction: "Evaluate",
+};
 
 // ── Landing ────────────────────────────────────────────────────
 function Landing({
@@ -227,7 +288,7 @@ function Landing({
             {loading ? "Connecting…" : "Connect to NWIS"}
           </button>
 
-          <p style={{ fontSize: "0.62rem", color: "var(--text-dim)", marginTop: "14px", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "14px", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
             SIMULATED · Synthetic demo rehearsal. No trained risk model or live eRTMAC.
             Synthetic examples establish behavior, not predictive accuracy.
           </p>
@@ -277,7 +338,7 @@ function FoundationView({
       <div className="workspace-header">
         <div>
           <p className="ws-eyebrow"><span className="plate-num">04</span> Well Directory</p>
-          <h1 className="ws-title">Well directory & platform</h1>
+          <h1 className="ws-title">Well directory &amp; platform</h1>
           <p className="ws-desc">Browse loaded wells, configure search radius, and inspect platform component status.</p>
         </div>
         <StateBadge state={`${status.source_mode} · ${status.environment}`} />
@@ -344,7 +405,7 @@ function FoundationView({
                   )}
                 </>
               ) : (
-                <p className="text-muted" style={{ fontSize: "0.8rem" }}>
+                <p className="text-muted" style={{ fontSize: "0.875rem" }}>
                   Load the golden fixture to see demonstration wells.
                 </p>
               )}
@@ -389,14 +450,14 @@ function FoundationView({
                       </div>
                     ))
                   ) : (
-                    <p className="text-muted" style={{ fontSize: "0.8rem" }}>No wells within {radius} km radius.</p>
+                    <p className="text-muted" style={{ fontSize: "0.875rem" }}>No wells within {radius} km radius.</p>
                   )}
                   <p className="mono-sm" style={{ marginTop: "12px", lineHeight: 1.6 }}>
                     Nearby wells selected by surface distance. Formation correlation planned for Phase 3.
                   </p>
                 </>
               ) : (
-                <p className="text-muted" style={{ fontSize: "0.8rem" }}>Select an active well first.</p>
+                <p className="text-muted" style={{ fontSize: "0.875rem" }}>Select an active well first.</p>
               )}
             </div>
           </div>
@@ -410,24 +471,290 @@ function FoundationView({
   );
 }
 
+// ── Sidebar Navigation ─────────────────────────────────────────
+function Sidebar({
+  view,
+  setView,
+  disconnect,
+  well,
+  status,
+  collapsed,
+  onToggleCollapse,
+}: {
+  view: View;
+  setView: (v: View) => void;
+  disconnect: () => void;
+  well: Well | undefined;
+  status: Status;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const isSynthetic = status.source_mode === "SYNTHETIC";
+
+  return (
+    <nav
+      className={`nav-sidebar${collapsed ? " collapsed" : ""}`}
+      aria-label="Main navigation"
+    >
+      {/* Header / Branding */}
+      <div className="sidebar-header">
+        <div className="sidebar-mark" title="NWIS · Nearby Wells Intelligence System">N</div>
+        <div className="sidebar-branding">
+          <strong>NWIS</strong>
+          <small>Subsurface Observatory</small>
+        </div>
+      </div>
+
+      {/* Active well block */}
+      {well && (
+        <div className="sidebar-well" title={`Active well: ${well.external_id}`}>
+          <div className="sidebar-well-id">{well.external_id}</div>
+          <div className="sidebar-well-meta">{well.basin_name ?? "Basin unknown"}</div>
+          <div className="sidebar-well-mode">
+            <span className={`ctx-dot ${isSynthetic ? "synthetic" : "live"}`} aria-hidden="true" />
+            {status.source_mode}
+          </div>
+        </div>
+      )}
+
+      {/* Navigation groups */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi} className="nav-group">
+            <span className="nav-group-label">{group.label}</span>
+            {group.items.map(({ id, label, plate, desc, Icon }) => (
+              <button
+                key={id}
+                className={`nav-item${view === id ? " active" : ""}`}
+                onClick={() => setView(id)}
+                aria-label={`${plate} ${label} — ${desc}`}
+                aria-current={view === id ? "page" : undefined}
+                title={collapsed ? `${plate} · ${label} — ${desc}` : undefined}
+              >
+                <span className="nav-item-icon"><Icon /></span>
+                <span className="nav-item-text">
+                  <span className="nav-item-label">
+                    <span className="nav-item-name">{label}</span>
+                    <span className="nav-item-plate">{plate}</span>
+                  </span>
+                  <span className="nav-item-desc">{desc}</span>
+                </span>
+              </button>
+            ))}
+            {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom area */}
+      <div className="sidebar-bottom">
+        <button
+          className="nav-item nav-item-muted"
+          onClick={() => {}}
+          title="Take a tour of NWIS"
+          aria-label="Take a tour of NWIS"
+        >
+          <span className="nav-item-icon"><IconHelp /></span>
+          <span className="nav-item-text">
+            <span className="nav-item-label">
+              <span className="nav-item-name">Take a tour</span>
+            </span>
+            <span className="nav-item-desc">Guided walkthrough</span>
+          </span>
+        </button>
+        <button
+          className="nav-disconnect"
+          onClick={disconnect}
+          title="Disconnect from platform"
+          aria-label="Disconnect from platform"
+        >
+          <IconDisconnect />
+          <span className="nav-disconnect-label">Disconnect</span>
+        </button>
+      </div>
+
+      {/* Collapse toggle */}
+      <div className="sidebar-collapse">
+        <button
+          className="sidebar-collapse-btn"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <IconChevronRight /> : <IconChevronLeft />}
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+// ── Mobile Drawer ──────────────────────────────────────────────
+function MobileDrawer({
+  view,
+  setView,
+  disconnect,
+  well,
+  status,
+  open,
+  onClose,
+}: {
+  view: View;
+  setView: (v: View) => void;
+  disconnect: () => void;
+  well: Well | undefined;
+  status: Status;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const isSynthetic = status.source_mode === "SYNTHETIC";
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && open) onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  function navigate(v: View) {
+    setView(v);
+    onClose();
+  }
+
+  return (
+    <>
+      <div
+        className={`drawer-overlay${open ? " open" : ""}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className={`nav-drawer${open ? " open" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+      >
+        <div className="drawer-close">
+          <div className="sidebar-header" style={{ border: "none", padding: 0, minHeight: "auto" }}>
+            <div className="sidebar-mark">N</div>
+            <div className="sidebar-branding">
+              <strong>NWIS</strong>
+              <small>Subsurface Observatory</small>
+            </div>
+          </div>
+          <button
+            ref={closeRef}
+            className="drawer-close-btn"
+            onClick={onClose}
+            aria-label="Close navigation menu"
+          >
+            <IconClose />
+          </button>
+        </div>
+
+        {well && (
+          <div className="sidebar-well" style={{ margin: "10px 12px 4px" }}>
+            <div className="sidebar-well-id">{well.external_id}</div>
+            <div className="sidebar-well-meta">{well.basin_name ?? "Basin unknown"}</div>
+            <div className="sidebar-well-mode">
+              <span className={`ctx-dot ${isSynthetic ? "synthetic" : "live"}`} aria-hidden="true" />
+              {status.source_mode}
+            </div>
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px" }}>
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} className="nav-group" style={{ padding: 0 }}>
+              <span className="nav-group-label">{group.label}</span>
+              {group.items.map(({ id, label, plate, desc, Icon }) => (
+                <button
+                  key={id}
+                  className={`nav-item${view === id ? " active" : ""}`}
+                  onClick={() => navigate(id)}
+                  aria-label={`${plate} ${label} — ${desc}`}
+                  aria-current={view === id ? "page" : undefined}
+                >
+                  <span className="nav-item-icon"><Icon /></span>
+                  <span className="nav-item-text">
+                    <span className="nav-item-label">
+                      <span className="nav-item-name">{label}</span>
+                      <span className="nav-item-plate">{plate}</span>
+                    </span>
+                    <span className="nav-item-desc">{desc}</span>
+                  </span>
+                </button>
+              ))}
+              {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+            </div>
+          ))}
+        </div>
+
+        <div className="sidebar-bottom">
+          <button
+            className="nav-item nav-item-muted"
+            onClick={onClose}
+            aria-label="Take a tour of NWIS"
+          >
+            <span className="nav-item-icon"><IconHelp /></span>
+            <span className="nav-item-text">
+              <span className="nav-item-label">
+                <span className="nav-item-name">Take a tour</span>
+              </span>
+              <span className="nav-item-desc">Guided walkthrough</span>
+            </span>
+          </button>
+          <button
+            className="nav-disconnect"
+            onClick={() => { disconnect(); onClose(); }}
+            aria-label="Disconnect from platform"
+          >
+            <IconDisconnect />
+            <span className="nav-disconnect-label">Disconnect</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Context Bar ────────────────────────────────────────────────
 function ContextBar({
   status,
   wells,
   selected,
   streamMode,
+  view,
+  onMenuOpen,
 }: {
   status: Status;
   wells: Well[];
   selected: string;
   streamMode?: string;
+  view: View;
+  onMenuOpen: () => void;
 }) {
   const w = wells.find((well) => well.id === selected);
   const isReplay = status.source_mode === "SYNTHETIC";
-  const dotCls = isReplay ? "ctx-dot replay" : "ctx-dot live";
+  const dotCls = isReplay ? "ctx-dot synthetic" : "ctx-dot live";
 
   return (
     <div className="context-bar" role="banner" aria-label="Well context">
+      {/* Mobile menu button */}
+      <button
+        className="mobile-menu-btn"
+        onClick={onMenuOpen}
+        aria-label="Open navigation menu"
+        style={{ marginRight: "12px" }}
+      >
+        <IconMenu />
+      </button>
+
       {w && (
         <>
           <div className="ctx-chip">
@@ -438,7 +765,7 @@ function ContextBar({
             <span className="ctx-label">Basin</span>
             <span className="ctx-value">{w.basin_name ?? "—"}</span>
           </div>
-          <div className="ctx-chip">
+          <div className="ctx-chip" style={{ display: "none" }} data-coords>
             <span className="ctx-label">Coords</span>
             <span className="ctx-value mono-sm">
               {w.latitude.toFixed(4)}°N {w.longitude.toFixed(4)}°E
@@ -457,13 +784,26 @@ function ContextBar({
         <span className="ctx-label">Env</span>
         <span className="ctx-value">{status.environment.toUpperCase()}</span>
       </div>
+
       <div className="ctx-spacer" />
+
+      {/* Current view indicator */}
+      <span style={{
+        fontSize: "0.8125rem",
+        fontWeight: 600,
+        color: "var(--text-secondary)",
+        marginRight: "12px",
+        whiteSpace: "nowrap",
+      }}>
+        {VIEW_TITLES[view]}
+      </span>
+
       {streamMode && (
         <span className={`ctx-stream-badge ${streamMode === "ws" ? "ws" : "http"}`}>
           {streamMode === "ws" ? "⚡ WebSocket" : "↺ HTTP"}
         </span>
       )}
-      <div className="ctx-chip">
+      <div className="ctx-chip" style={{ borderRight: "none" }}>
         <span className="ctx-label">Datasets</span>
         <span className="ctx-value mono-sm">
           {status.datasets.length ? status.datasets[0] : "none"}
@@ -484,6 +824,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>("operations");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -526,6 +868,7 @@ export default function App() {
     setNearby([]);
     setError("");
     setView("operations");
+    setSidebarCollapsed(false);
   }
 
   // Not connected
@@ -539,41 +882,41 @@ export default function App() {
     );
   }
 
+  const activeWell = wells.find((w) => w.id === selected);
+
   return (
     <div className="shell">
-      {/* Navigation Rail */}
-      <nav className="nav-rail" aria-label="Main navigation">
-        <div className="nav-logo" title="NWIS · Nearby Wells Intelligence System">N</div>
+      {/* Descriptive sidebar */}
+      <Sidebar
+        view={view}
+        setView={setView}
+        disconnect={disconnect}
+        well={activeWell}
+        status={status}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+      />
 
-        {NAV_ITEMS.map(({ id, label, plate, Icon }) => (
-          <button
-            key={id}
-            className={`nav-btn${view === id ? " active" : ""}`}
-            onClick={() => setView(id)}
-            aria-label={`${plate} ${label}`}
-            aria-current={view === id ? "page" : undefined}
-            title={`${plate} · ${label}`}
-          >
-            <Icon />
-            {plate}
-          </button>
-        ))}
-
-        <div className="nav-spacer" />
-
-        <button
-          className="nav-disconnect"
-          onClick={disconnect}
-          title="Disconnect"
-          aria-label="Disconnect from platform"
-        >
-          <IconDisconnect />
-        </button>
-      </nav>
+      {/* Mobile drawer */}
+      <MobileDrawer
+        view={view}
+        setView={setView}
+        disconnect={disconnect}
+        well={activeWell}
+        status={status}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      />
 
       {/* Main body */}
-      <div className="app-body">
-        <ContextBar status={status} wells={wells} selected={selected} />
+      <div className={`app-body${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+        <ContextBar
+          status={status}
+          wells={wells}
+          selected={selected}
+          view={view}
+          onMenuOpen={() => setDrawerOpen(true)}
+        />
 
         <div className="main-canvas">
           {view === "operations" ? (
@@ -589,6 +932,16 @@ export default function App() {
               </div>
             }>
               <Intelligence token={token} />
+            </Suspense>
+          ) : view === "analytics" ? (
+            <Suspense fallback={
+              <div className="workspace">
+                <div className="workspace-body">
+                  <div className="notice">Loading correlation analytics & ledger…</div>
+                </div>
+              </div>
+            }>
+              <Analytics token={token} />
             </Suspense>
           ) : view === "questions" ? (
             <ReportQuestions token={token} />
