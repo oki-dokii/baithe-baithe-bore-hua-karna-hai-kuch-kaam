@@ -23,8 +23,10 @@ from nwis.exploration import router as exploration_router
 from nwis.pressure_window import router as pressure_window_router
 from nwis.operational_views import router as operational_views_router
 from nwis.telemetry_dossier import router as telemetry_dossier_router
+from nwis.security import router as auth_router
 
 app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
+app.include_router(auth_router)
 app.include_router(ingestion_router)
 app.include_router(intelligence_router)
 app.include_router(operations_router)

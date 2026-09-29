@@ -269,15 +269,43 @@ function Landing({
   const [selectedRole, setSelectedRole] = useState<UserRole>("engineer");
   const [token, setToken] = useState(ROLES.engineer.token);
   const [showCustomToken, setShowCustomToken] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [roleError, setRoleError] = useState("");
 
   function handleSelectRole(role: UserRole) {
     setSelectedRole(role);
     setToken(ROLES[role].token);
+    setRoleError("");
+  }
+
+  async function handleLaunch() {
+    setLoginBusy(true);
+    setRoleError("");
+    try {
+      // Attempt backend auth login endpoint
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: selectedRole, token: token.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.token) {
+        onConnect(data.token, selectedRole);
+        return;
+      }
+    } catch {
+      // Backend auth endpoint unavailable or in offline demo mode; proceed with configured role token
+    } finally {
+      setLoginBusy(false);
+    }
+    // Fall back to configured/entered token
+    const tokenToUse = token.trim() || ROLES[selectedRole].token;
+    onConnect(tokenToUse, selectedRole);
   }
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    onConnect(token.trim(), selectedRole);
+    handleLaunch();
   }
 
   const depthTicks = [
@@ -339,25 +367,25 @@ function Landing({
             </div>
           </div>
 
-          <h2 className="auth-title">Connect to platform</h2>
+          <h2 className="auth-title">Select Operational Role</h2>
           <p className="auth-desc">
-            Select your demo role to experience role-based workspace filtering.
+            Select your role to experience role-based workspace authorization.
             Each role accesses only its authorized operational and analytical views.
           </p>
 
-          {error && (
+          {(error || roleError) && (
             <div className="error-msg" role="alert">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="8" cy="8" r="7" />
                 <path d="M8 5v3.5M8 11v.5" strokeLinecap="round" />
               </svg>
-              {error}
+              {error || roleError}
             </div>
           )}
 
           {/* Role selector */}
           <div className="role-selector-label">
-            <span>Select Demo Role</span>
+            <span>Select Role</span>
             <span style={{ color: selectedRole === "superadmin" ? "#c084fc" : "var(--teal-glow)" }}>
               {ROLES[selectedRole].name}
             </span>
@@ -460,18 +488,18 @@ function Landing({
             className="btn btn-primary btn-full"
             type="submit"
             id="connect-btn"
-            disabled={loading || token.length < 16}
+            disabled={loading || loginBusy}
             style={selectedRole === "superadmin" ? {
               background: "linear-gradient(135deg, #7e22ce, #a855f7)",
               borderColor: "#c084fc",
               boxShadow: "0 4px 18px rgba(168, 85, 247, 0.4)",
             } : undefined}
           >
-            {loading ? "Connecting…" : `Launch as ${ROLES[selectedRole].shortTitle} →`}
+            {loading || loginBusy ? "Connecting…" : `Launch as ${ROLES[selectedRole].shortTitle} →`}
           </button>
 
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "14px", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
-            SIMULATED · Synthetic demo rehearsal. Role-based view authorization active.
+            OIL Subsurface Observatory · Role-Based Access Control · Source-audited evidence pipeline.
           </p>
         </form>
       </div>

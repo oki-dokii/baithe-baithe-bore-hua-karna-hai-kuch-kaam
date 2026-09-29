@@ -62,6 +62,37 @@ def local_candidates(text: str) -> list[Candidate]:
                     depth = None  # Fish location is not the stuck-pipe onset.
                 start = float(depth[1].replace(",", "")) if depth else None
                 end = float(depth[2].replace(",", "")) if depth and depth[2] else start
+
+                # Multi-attribute contextual extraction from surrounding text
+                npt_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\s*(?:of\s*)?NPT\b", paragraph, re.I)
+                npt_val = float(npt_match[1]) if npt_match else None
+
+                mit_match = re.search(
+                    r"\b(?:pump(?:ed)?|mix(?:ed)?|spot(?:ted)?|jar(?:red)?|circulat(?:ed)?)\s+([^.]+?(?:pill|fluid|lcm|force|method)[^.]*)",
+                    paragraph,
+                    re.I,
+                )
+                mit_val = mit_match[0].strip()[:200] if mit_match else None
+
+                out_match = re.search(
+                    r"\b(regained full returns|string freed|cured|stabilized|well killed|unsuccessful)\b",
+                    paragraph,
+                    re.I,
+                )
+                out_val = None
+                if out_match:
+                    phrase = out_match[0].lower()
+                    out_val = "successful" if any(w in phrase for w in ("regained", "freed", "cured", "stabilized", "killed")) else "partial"
+
+                fmt_match = re.search(r"\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:Sandstone|Formation|Clay|Shale|Group|Limestone)\b", sentence)
+                extracted_fmt = fmt_match[1] if fmt_match else formation
+
+                sev_val = None
+                if re.search(r"\b(severe|total|catastrophic|uncontrolled)\b", sentence, re.I):
+                    sev_val = "critical"
+                elif re.search(r"\bpartial\b", sentence, re.I):
+                    sev_val = "medium"
+
                 result.append(
                     Candidate(
                         event_type=kind,
@@ -72,11 +103,11 @@ def local_candidates(text: str) -> list[Candidate]:
                         depth_unit=depth[3] if depth else None,
                         depth_axis=depth[4].upper() if depth and depth[4] else None,
                         depth_datum=datum,
-                        formation_name=formation,
-                        severity=None,
-                        mitigation=None,
-                        outcome=None,
-                        npt_hours=None,
+                        formation_name=extracted_fmt,
+                        severity=sev_val,
+                        mitigation=mit_val,
+                        outcome=out_val,
+                        npt_hours=npt_val,
                     )
                 )
     return result
