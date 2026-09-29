@@ -440,6 +440,8 @@ export default function Documents({ token }: { token: string }) {
   const [revision, setRevision] = useState(0);
   const [manualQuote, setManualQuote] = useState("");
   const [manualRationale, setManualRationale] = useState("");
+  const [activeTab, setActiveTab] = useState<"workbench" | "facts" | "voice">("workbench");
+  const [docFilter, setDocFilter] = useState("");
   const canReview = identity?.role === "reviewer" || identity?.role === "admin";
   const canUpload = identity && identity.role !== "viewer";
   useEffect(() => {
@@ -666,22 +668,45 @@ export default function Documents({ token }: { token: string }) {
       setBusy(false);
     }
   }
+  const filteredDocuments = documents.filter((doc) =>
+    doc.filename.toLowerCase().includes(docFilter.toLowerCase()) ||
+    doc.kind.toLowerCase().includes(docFilter.toLowerCase())
+  );
+
   return (
-    <section aria-label="Document evidence workspace">
+    <section aria-label="Document evidence workspace" className="documents-workspace">
+      {/* Workspace Header */}
       <div className="archive-heading">
         <div>
-          <p className="eyebrow">01 / Institutional memory</p>
+          <p className="eyebrow">04 / Validation & Source Studio</p>
           <h1>The evidence room.</h1>
           <p>Read the record. Verify the detail. Carry the lesson forward.</p>
         </div>
-        {canUpload && (
-          <button onClick={() => setShowUpload((v) => !v)}>
-            {showUpload ? "Close upload" : "+ Add a report"}
-          </button>
-        )}
+        <div className="header-actions">
+          {canUpload && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setShowUpload((v) => !v);
+                setActiveTab("workbench");
+              }}
+            >
+              {showUpload ? "Close upload" : "+ Upload report"}
+            </button>
+          )}
+          {canUpload && (
+            <button
+              className="text-button"
+              onClick={() => setActiveTab("voice")}
+            >
+              🎙️ Record shift note
+            </button>
+          )}
+        </div>
       </div>
+
       <div className="archive-meta">
-        <span>{String(documents.length).padStart(2, "0")} REPORTS IN VIEW</span>
+        <span>{String(documents.length).padStart(2, "0")} REPORTS IN ARCHIVE</span>
         <span>
           {identity
             ? identity.extraction_provider === "local_rules"
@@ -690,8 +715,9 @@ export default function Documents({ token }: { token: string }) {
             : "CONNECTING"}{" "}
           · HUMAN REVIEW REQUIRED
         </span>
-        <span>{identity?.role}</span>
+        <span>ROLE: {identity?.role?.toUpperCase()}</span>
       </div>
+
       {error && (
         <div role="alert" className="error">
           {error}
@@ -705,359 +731,516 @@ export default function Documents({ token }: { token: string }) {
           {notice}
         </p>
       )}
-      {showUpload && (
-        <form className="upload-form" onSubmit={upload}>
-          <div>
-            <label htmlFor="report-file">
-              Source report · PDF or UTF-8 text
-            </label>
-            <input
-              id="report-file"
-              type="file"
-              accept=".pdf,.txt"
-              required
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-            <p className="footnote">
-              25 MB maximum · {identity?.document_max_pages ?? 50} pages · English OCR
-            </p>
-          </div>
-          <div>
-            <label htmlFor="upload-well">Link to wellbore</label>
-            <select
-              id="upload-well"
-              value={wellbore}
-              onChange={(e) => setWellbore(e.target.value)}
-            >
-              {options.map((o) => (
-                <option key={o.wellbore_id} value={o.wellbore_id}>
-                  {o.name} · {o.kind}
-                </option>
-              ))}
-            </select>
-            {!options.length && (
-              <p>No wellbores available. Load the foundation fixture first.</p>
-            )}
-          </div>
-          <button disabled={busy || !file || !wellbore}>
-            {busy ? "Uploading…" : "Upload & extract →"}
-          </button>
-        </form>
-      )}
-      {canUpload && <VoiceMemo token={token} options={options}
-        asrAvailable={Boolean(identity?.voice_local_asr_available)}
-        onSaved={(id) => { setSelected(id); setDetail(null); setRevision((value) => value + 1);
-          setNotice("Voice memo received. The transcript will enter the same evidence-review queue."); }} />}
-      <div className="review-layout">
-        <aside className="report-index">
-          <h2>
-            Report index{" "}
-            <span>{String(documents.length).padStart(2, "0")}</span>
-          </h2>
-          {documents.length ? (
-            documents.map((doc, i) => (
-              <button
-                className={`report-entry ${selected === doc.id ? "selected" : ""}`}
-                key={doc.id}
-                onClick={() => {
-                  setSelected(doc.id);
-                  setDetail(null);
-                  setCandidateId("");
-                  setPageNumber(1);
-                  setNotice("");
-                }}
-              >
-                <span className="report-number">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <strong>{doc.filename}</strong>
-                <small>
-                  {doc.doc_type === "voice_memo" ? "VOICE MEMO · " : ""}
-                  {doc.origin_kind
-                    ? `${human(doc.origin_kind)} · ${human(doc.applicability)}`
-                    : doc.kind} · {doc.page_count ?? "—"} pages
-                </small>
-                <span className={`state state-${doc.ingest_status}`}>
-                  {human(doc.ingest_status)}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="index-empty">
-              <span className="folio-icon" aria-hidden="true">
-                ≡
-              </span>
-              <p>The archive starts with a report.</p>
-              <small>
-                {canUpload
-                  ? "Add a drilling report to begin."
-                  : "Approved evidence will appear here when available."}
-              </small>
+
+      {/* Subview Tabs Bar */}
+      <div className="subview-tab-bar" role="tablist" aria-label="Validation workspaces">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "workbench"}
+          className={`subview-tab-btn ${activeTab === "workbench" ? "active" : ""}`}
+          onClick={() => setActiveTab("workbench")}
+        >
+          <span className="tab-num">01</span>
+          <span className="tab-title">Review Studio</span>
+          <span className="tab-desc">Queue, source viewer & claim decision</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "facts"}
+          className={`subview-tab-btn ${activeTab === "facts" ? "active" : ""}`}
+          onClick={() => setActiveTab("facts")}
+        >
+          <span className="tab-num">02</span>
+          <span className="tab-title">Structured Facts</span>
+          <span className="tab-desc">Drilling parameters & casing logs</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "voice"}
+          className={`subview-tab-btn ${activeTab === "voice" ? "active" : ""}`}
+          onClick={() => setActiveTab("voice")}
+        >
+          <span className="tab-num">03</span>
+          <span className="tab-title">Shift Voice Memo</span>
+          <span className="tab-desc">Spoken field note capture & audio</span>
+        </button>
+      </div>
+
+      {/* Tab 1: Document Review Workbench */}
+      {activeTab === "workbench" && (
+        <>
+          {showUpload && (
+            <div className="upload-banner">
+              <div className="upload-banner-header">
+                <h3>Upload New Source Report</h3>
+                <button className="text-button" onClick={() => setShowUpload(false)}>✕ Close</button>
+              </div>
+              <form className="upload-form" onSubmit={upload}>
+                <div>
+                  <label htmlFor="report-file">
+                    Source report · PDF or UTF-8 text
+                  </label>
+                  <input
+                    id="report-file"
+                    type="file"
+                    accept=".pdf,.txt"
+                    required
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                  <p className="footnote">
+                    25 MB maximum · {identity?.document_max_pages ?? 50} pages · English OCR
+                  </p>
+                </div>
+                <div>
+                  <label htmlFor="upload-well">Link to wellbore</label>
+                  <select
+                    id="upload-well"
+                    value={wellbore}
+                    onChange={(e) => setWellbore(e.target.value)}
+                  >
+                    {options.map((o) => (
+                      <option key={o.wellbore_id} value={o.wellbore_id}>
+                        {o.name} · {o.kind}
+                      </option>
+                    ))}
+                  </select>
+                  {!options.length && (
+                    <p>No wellbores available. Load the foundation fixture first.</p>
+                  )}
+                </div>
+                <button disabled={busy || !file || !wellbore}>
+                  {busy ? "Uploading…" : "Upload & extract →"}
+                </button>
+              </form>
             </div>
           )}
-          <p className="index-note">
-            Historical evidence,
-            <br />
-            not operating instructions.
-          </p>
-        </aside>
-        <section className="source-panel" aria-label="Source report">
-          <div className="panel-heading">
-            <h2>Source record</h2>
-            <span className="mono">
-              {detail ? human(detail.ingest_status) : "NO RECORD SELECTED"}
-            </span>
-          </div>
-          {detail ? (
-            <>
-              {detail.origin_kind && (
-                <p className="quality-note">
-                  Source: {human(detail.origin_kind)} · authorization: {human(detail.authorization_state)}
-                  · use: {human(detail.applicability)} · qualification: {human(detail.qualification_status)}.
-                </p>
-              )}
-              <div className="source-toolbar">
-                <strong title={detail.filename}>{detail.filename}</strong>
-                {detail.pages.length > 0 && (
-                  <div>
-                    <label className="sr-only" htmlFor="page-selector">
-                      Source page
-                    </label>
-                    <select
-                      id="page-selector"
-                      value={page?.page_number ?? 1}
-                      onChange={(e) => setPageNumber(Number(e.target.value))}
+
+          <div className="review-layout">
+            {/* Column 1: Report Queue */}
+            <aside className="report-index">
+              <div className="report-index-header">
+                <h2>
+                  Review Queue <span>{String(documents.length).padStart(2, "0")}</span>
+                </h2>
+                {canUpload && (
+                  <button
+                    className="text-button"
+                    onClick={() => setShowUpload((v) => !v)}
+                    title="Upload report"
+                  >
+                    + Upload
+                  </button>
+                )}
+              </div>
+              <div className="report-search-box">
+                <input
+                  type="text"
+                  placeholder="Filter reports by name..."
+                  value={docFilter}
+                  onChange={(e) => setDocFilter(e.target.value)}
+                />
+              </div>
+              <div className="report-index-body">
+                {filteredDocuments.length ? (
+                  filteredDocuments.map((doc, i) => (
+                    <button
+                      className={`report-entry ${selected === doc.id ? "selected" : ""}`}
+                      key={doc.id}
+                      onClick={() => {
+                        setSelected(doc.id);
+                        setDetail(null);
+                        setCandidateId("");
+                        setPageNumber(1);
+                        setNotice("");
+                      }}
                     >
-                      {detail.pages.map((p) => (
-                        <option key={p.id} value={p.page_number}>
-                          Page {p.page_number}
-                        </option>
-                      ))}
-                    </select>
-                    {page?.has_preview && (
-                      <button
-                        className="text-button"
-                        onClick={() => setShowImage((v) => !v)}
-                      >
-                        {showImage ? "Text view" : "Page image"}
-                      </button>
-                    )}
+                      <div className="report-entry-id">
+                        REPORT {String(i + 1).padStart(2, "0")}
+                        {doc.doc_type === "voice_memo" ? " · 🎙️ VOICE" : " · 📄 DOC"}
+                      </div>
+                      <div className="report-entry-name" title={doc.filename}>{doc.filename}</div>
+                      <div className="report-entry-meta">
+                        {doc.origin_kind
+                          ? `${human(doc.origin_kind)} · ${human(doc.applicability)}`
+                          : doc.kind} · {doc.page_count ?? "—"} p.
+                      </div>
+                      <span className={`state state-${doc.ingest_status}`}>
+                        {human(doc.ingest_status)}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="index-empty">
+                    <span className="folio-icon" aria-hidden="true">
+                      ≡
+                    </span>
+                    <p>
+                      {docFilter ? "No reports match your filter." : "The archive starts with a report."}
+                    </p>
+                    <small>
+                      {canUpload
+                        ? "Add a drilling report to begin."
+                        : "Approved evidence will appear here when available."}
+                    </small>
                   </div>
                 )}
               </div>
-              {detail.doc_type === "voice_memo" && <div className="voice-source-note">
-                <p className="footnote">Voice transcript is untrusted until a reviewer checks the audio and approves a cited claim. Audio access is limited to the uploader and reviewers; it expires after 30 days.</p>
-                {audioUrl ? <audio controls src={audioUrl} aria-label="Original voice memo" /> : <p>Audio unavailable or access restricted.</p>}
-                {audioUrl && canUpload && page && <form onSubmit={saveTranscriptCorrection} className="voice-correction">
-                  <label htmlFor="corrected-voice-text">Correct transcript before claim review</label>
-                  <textarea id="corrected-voice-text" rows={5} value={correctedTranscript} onChange={(e) => setCorrectedTranscript(e.target.value)} />
-                  <label htmlFor="voice-correction-reason">Correction rationale</label>
-                  <input id="voice-correction-reason" value={correctionRationale} onChange={(e) => setCorrectionRationale(e.target.value)} />
-                  <button disabled={busy || correctedTranscript.trim() === page.raw_text.trim()}>Save new transcript version</button>
-                </form>}
-              </div>}
-              {page ? (
-                <div className="source-sheet">
-                  {page.ocr_applied && (
-                    <p className="ocr-note">
-                      OCR transcription ·{" "}
-                      {page.ocr_confidence == null
-                        ? "confidence unavailable"
-                        : `${Math.round(page.ocr_confidence * 100)}% mean word confidence`}{" "}
-                      · verify against image
+              <p className="index-note">
+                Historical evidence, not operating instructions.
+              </p>
+            </aside>
+
+            {/* Column 2: Source Record Viewer */}
+            <section className="source-panel" aria-label="Source report">
+              <div className="panel-heading">
+                <h2>Source record</h2>
+                <span className="mono">
+                  {detail ? human(detail.ingest_status) : "NO RECORD SELECTED"}
+                </span>
+              </div>
+              {detail ? (
+                <>
+                  {detail.origin_kind && (
+                    <p className="quality-note">
+                      Source: {human(detail.origin_kind)} · authorization: {human(detail.authorization_state)}
+                      · use: {human(detail.applicability)} · qualification: {human(detail.qualification_status)}.
                     </p>
                   )}
-                  {detail.doc_type === "voice_memo" && <p className="ocr-note">
-                    {human(page.transcription_language ?? "language unknown")} voice transcript · {page.transcription_confidence == null ? "confidence unavailable (typed or corrected)" : `${Math.round(page.transcription_confidence * 100)}% uncalibrated token likelihood`} · verify against audio
-                  </p>}
-                  {showImage && image ? (
-                    <img
-                      className="page-image"
-                      src={image}
-                      alt={`Original report page ${page.page_number}`}
-                    />
-                  ) : (
-                    <pre className="source-text">
-                      {page.raw_text || "No readable text found on this page."}
-                    </pre>
-                  )}
-                  <div className="page-folio">
-                    NWIS / SOURCE ARCHIVE{" "}
-                    <span>{String(page.page_number).padStart(2, "0")}</span>
+                  <div className="source-toolbar">
+                    <strong title={detail.filename}>{detail.filename}</strong>
+                    {detail.pages.length > 0 && (
+                      <div>
+                        <label className="sr-only" htmlFor="page-selector">
+                          Source page
+                        </label>
+                        <select
+                          id="page-selector"
+                          value={page?.page_number ?? 1}
+                          onChange={(e) => setPageNumber(Number(e.target.value))}
+                        >
+                          {detail.pages.map((p) => (
+                            <option key={p.id} value={p.page_number}>
+                              Page {p.page_number} of {detail.pages.length}
+                            </option>
+                          ))}
+                        </select>
+                        {page?.has_preview && (
+                          <button
+                            className="text-button"
+                            onClick={() => setShowImage((v) => !v)}
+                          >
+                            {showImage ? "Text view" : "Page image"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
+                  {detail.doc_type === "voice_memo" && (
+                    <div className="voice-source-note">
+                      <p className="footnote">
+                        Voice transcript is untrusted until a reviewer checks the audio and approves a cited claim. Audio access is limited to the uploader and reviewers; expires in 30 days.
+                      </p>
+                      {audioUrl ? (
+                        <audio controls src={audioUrl} aria-label="Original voice memo" />
+                      ) : (
+                        <p>Audio unavailable or access restricted.</p>
+                      )}
+                      {audioUrl && canUpload && page && (
+                        <form onSubmit={saveTranscriptCorrection} className="voice-correction">
+                          <label htmlFor="corrected-voice-text">Correct transcript before claim review</label>
+                          <textarea
+                            id="corrected-voice-text"
+                            rows={4}
+                            value={correctedTranscript}
+                            onChange={(e) => setCorrectedTranscript(e.target.value)}
+                          />
+                          <label htmlFor="voice-correction-reason">Correction rationale</label>
+                          <input
+                            id="voice-correction-reason"
+                            value={correctionRationale}
+                            onChange={(e) => setCorrectionRationale(e.target.value)}
+                          />
+                          <button disabled={busy || correctedTranscript.trim() === page.raw_text.trim()}>
+                            Save new transcript version
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                  {page ? (
+                    <div className="source-sheet">
+                      {page.ocr_applied && (
+                        <p className="ocr-note">
+                          OCR transcription ·{" "}
+                          {page.ocr_confidence == null
+                            ? "confidence unavailable"
+                            : `${Math.round(page.ocr_confidence * 100)}% mean word confidence`}{" "}
+                          · verify against image
+                        </p>
+                      )}
+                      {detail.doc_type === "voice_memo" && (
+                        <p className="ocr-note">
+                          {human(page.transcription_language ?? "language unknown")} voice transcript ·{" "}
+                          {page.transcription_confidence == null
+                            ? "confidence unavailable (typed or corrected)"
+                            : `${Math.round(page.transcription_confidence * 100)}% uncalibrated token likelihood`}{" "}
+                          · verify against audio
+                        </p>
+                      )}
+                      {showImage && image ? (
+                        <img
+                          className="page-image"
+                          src={image}
+                          alt={`Original report page ${page.page_number}`}
+                        />
+                      ) : (
+                        <pre className="source-text">
+                          {page.raw_text || "No readable text found on this page."}
+                        </pre>
+                      )}
+                      <div className="page-folio">
+                        NWIS / SOURCE ARCHIVE{" "}
+                        <span>{String(page.page_number).padStart(2, "0")}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="empty-source">
+                      <span className="large-folio">
+                        {detail.ingest_status === "failed" ? "!" : "…"}
+                      </span>
+                      <h3>
+                        {detail.ingest_status === "failed"
+                          ? "This report needs another look."
+                          : canReview
+                            ? "Preparing the source record."
+                            : "Source access is limited."}
+                      </h3>
+                      <p>
+                        {detail.jobs[0]?.error_message ??
+                          (canReview
+                            ? "The worker is reading the report. Extracted pages will appear here."
+                            : "Full source pages are reserved for reviewers. Approved claims appear in the evidence column.")}
+                      </p>
+                      {detail.ingest_status === "failed" && canReview && (
+                        <button onClick={retry} disabled={busy}>
+                          Retry extraction
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="empty-source">
-                  <span className="large-folio">
-                    {detail.ingest_status === "failed" ? "!" : "…"}
-                  </span>
+                  <div className="document-outline" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                  <p className="eyebrow">Every lesson has a source</p>
                   <h3>
-                    {detail.ingest_status === "failed"
-                      ? "This report needs another look."
-                      : canReview
-                        ? "Preparing the source record."
-                        : "Source access is limited."}
+                    Open a report from the queue.
+                    <br />
+                    Start with what happened.
                   </h3>
                   <p>
-                    {detail.jobs[0]?.error_message ??
-                      (canReview
-                        ? "The worker is reading the report. Extracted pages will appear here."
-                        : "Full source pages are reserved for reviewers. Approved claims appear in the evidence column.")}
+                    The original page stays beside each extracted claim, so nothing
+                    loses its context.
                   </p>
-                  {detail.ingest_status === "failed" && canReview && (
-                    <button onClick={retry} disabled={busy}>
-                      Retry extraction
-                    </button>
-                  )}
                 </div>
               )}
-            </>
-          ) : (
-            <div className="empty-source">
-              <div className="document-outline" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-                <i />
+            </section>
+
+            {/* Column 3: Evidence Ledger & Review Studio */}
+            <aside className="evidence-panel">
+              <div className="panel-heading">
+                <h2>Evidence ledger</h2>
+                <span className="mono">
+                  {String(detail?.candidates.length ?? 0).padStart(2, "0")}
+                </span>
               </div>
-              <p className="eyebrow">Every lesson has a source</p>
-              <h3>
-                Open a report.
-                <br />
-                Start with what happened.
-              </h3>
-              <p>
-                The original page stays beside each extracted claim, so nothing
-                loses its context.
-              </p>
-            </div>
-          )}
-        </section>
-        <aside className="evidence-panel">
-          <div className="panel-heading">
-            <h2>Evidence ledger</h2>
-            <span className="mono">
-              {String(detail?.candidates.length ?? 0).padStart(2, "0")}
-            </span>
+              <div className="evidence-panel-body">
+                {candidate && detail ? (
+                  <>
+                    <label className="sr-only" htmlFor="candidate-selector">
+                      Select extracted event
+                    </label>
+                    <select
+                      className="candidate-selector"
+                      id="candidate-selector"
+                      value={candidate.id}
+                      onChange={(e) => {
+                        setCandidateId(e.target.value);
+                        const next = detail.candidates.find(
+                          (c) => c.id === e.target.value,
+                        );
+                        if (next) setPageNumber(next.page_number);
+                      }}
+                    >
+                      {detail.candidates.map((c, i) => (
+                        <option key={c.id} value={c.id}>
+                          {i + 1}. {human(c.current_fields.event_type)} · p.
+                          {c.page_number} · {human(c.state)}
+                        </option>
+                      ))}
+                    </select>
+                    <Review
+                      key={`${candidate.id}:${candidate.version}`}
+                      candidate={candidate}
+                      token={token}
+                      documentId={detail.id}
+                      canReview={canReview}
+                      approvalBlocked={!(detail.approval_allowed ??
+                        (detail.qualification_status !== "staged_unreviewed"))}
+                      qualificationStatus={detail.qualification_status}
+                      voiceMemo={detail.doc_type === "voice_memo"}
+                      onSaved={() => {
+                        setRevision((r) => r + 1);
+                        setNotice("Review decision recorded with your rationale.");
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div className="ledger-empty">
+                    <span className="eyebrow">Nothing assumed.</span>
+                    <h3>
+                      Facts first.
+                      <br />
+                      Judgment second.
+                    </h3>
+                    <p>
+                      {detail?.ingest_status === "needs_review"
+                        ? "No candidates are visible. This does not establish that the report contains no incidents."
+                        : "Extracted events appear here with their source quote, depth reference and review status."}
+                    </p>
+                    <ol>
+                      <li>Identify the recorded event</li>
+                      <li>Verify depth and formation</li>
+                      <li>Record a review decision</li>
+                    </ol>
+                  </div>
+                )}
+
+                {canReview &&
+                  page &&
+                  detail &&
+                  ["needs_review", "reviewed"].includes(detail.ingest_status) && (
+                    <details className="manual-entry">
+                      <summary>
+                        Missing an incident? Add claim from p. {page.page_number}
+                      </summary>
+                      <form className="manual-entry-form" onSubmit={addCandidate}>
+                        <div>
+                          <label htmlFor="manual-quote">
+                            Exact quote from page {page.page_number}
+                          </label>
+                          <textarea
+                            id="manual-quote"
+                            required
+                            rows={3}
+                            maxLength={2000}
+                            value={manualQuote}
+                            onChange={(e) => setManualQuote(e.target.value)}
+                            placeholder="Quote the exact sentence..."
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="manual-rationale">
+                            Rationale for adding
+                          </label>
+                          <textarea
+                            id="manual-rationale"
+                            required
+                            rows={2}
+                            minLength={3}
+                            maxLength={2000}
+                            value={manualRationale}
+                            onChange={(e) => setManualRationale(e.target.value)}
+                            placeholder="Why is this claim safety or operationally critical?"
+                          />
+                        </div>
+                        <button disabled={busy} className="secondary">Add for review</button>
+                      </form>
+                    </details>
+                  )}
+
+                {!!detail?.audit.length && (
+                  <details className="review-history">
+                    <summary>Review history · {detail.audit.length}</summary>
+                    {detail.audit.map((a, i) => (
+                      <div key={i}>
+                        <strong>
+                          {human(a.action)} · {a.actor_name}
+                        </strong>
+                        <p>{a.rationale}</p>
+                        <time>{new Date(a.recorded_at).toLocaleString()}</time>
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </div>
+            </aside>
           </div>
-          {candidate && detail ? (
-            <>
-              <label className="sr-only" htmlFor="candidate-selector">
-                Select extracted event
-              </label>
-              <select
-                className="candidate-selector"
-                id="candidate-selector"
-                value={candidate.id}
-                onChange={(e) => {
-                  setCandidateId(e.target.value);
-                  const next = detail.candidates.find(
-                    (c) => c.id === e.target.value,
-                  );
-                  if (next) setPageNumber(next.page_number);
-                }}
-              >
-                {detail.candidates.map((c, i) => (
-                  <option key={c.id} value={c.id}>
-                    {i + 1}. {human(c.current_fields.event_type)} · p.
-                    {c.page_number} · {human(c.state)}
-                  </option>
-                ))}
-              </select>
-              <Review
-                key={`${candidate.id}:${candidate.version}`}
-                candidate={candidate}
-                token={token}
-                documentId={detail.id}
-                canReview={canReview}
-                approvalBlocked={!(detail.approval_allowed ??
-                  (detail.qualification_status !== "staged_unreviewed"))}
-                qualificationStatus={detail.qualification_status}
-                voiceMemo={detail.doc_type === "voice_memo"}
-                onSaved={() => {
-                  setRevision((r) => r + 1);
-                  setNotice("Review decision recorded with your rationale.");
-                }}
-              />
-            </>
+        </>
+      )}
+
+      {/* Tab 2: Structured Report Facts */}
+      {activeTab === "facts" && (
+        <div className="tab-content-panel">
+          <div className="tab-section-intro">
+            <h2>Structured Report Facts & Well Parameters</h2>
+            <p className="footnote">
+              Deterministic parameters, casing seats, mud weight records, and formation tops extracted from the active report.
+            </p>
+          </div>
+          {detail ? (
+            <ReportFacts
+              key={detail.id}
+              token={token}
+              documentId={detail.id}
+              datasetId={detail.dataset_id}
+              page={page}
+              canReview={canReview}
+              approvalAllowed={Boolean(detail.approval_allowed)}
+            />
           ) : (
-            <div className="ledger-empty">
-              <span className="eyebrow">Nothing assumed.</span>
-              <h3>
-                Facts first.
-                <br />
-                Judgment second.
-              </h3>
-              <p>
-                {detail?.ingest_status === "needs_review"
-                  ? "No candidates are visible. This does not establish that the report contains no incidents."
-                  : "Extracted events appear here with their source quote, depth reference and review status."}
-              </p>
-              <ol>
-                <li>Identify the recorded event</li>
-                <li>Verify depth and formation</li>
-                <li>Record a review decision</li>
-              </ol>
+            <div className="empty-source" style={{ minHeight: "300px" }}>
+              <h3>No Report Selected</h3>
+              <p>Select a report in the Review Studio to inspect its extracted parameters.</p>
+              <button className="secondary" onClick={() => setActiveTab("workbench")}>
+                Return to Review Studio →
+              </button>
             </div>
           )}
-          {!!detail?.audit.length && (
-            <details className="review-history">
-              <summary>Review history · {detail.audit.length}</summary>
-              {detail.audit.map((a, i) => (
-                <div key={i}>
-                  <strong>
-                    {human(a.action)} · {a.actor_name}
-                  </strong>
-                  <p>{a.rationale}</p>
-                  <time>{new Date(a.recorded_at).toLocaleString()}</time>
-                </div>
-              ))}
-            </details>
-          )}
-        </aside>
-      </div>
-      {canReview &&
-        page &&
-        detail &&
-        ["needs_review", "reviewed"].includes(detail.ingest_status) && (
-          <details className="manual-entry">
-            <summary>
-              Missing an incident? Add source-backed evidence from page{" "}
-              {page.page_number}
-            </summary>
-            <form className="upload-form" onSubmit={addCandidate}>
-              <div>
-                <label htmlFor="manual-quote">
-                  Exact quote from the selected page
-                </label>
-                <textarea
-                  id="manual-quote"
-                  required
-                  maxLength={2000}
-                  value={manualQuote}
-                  onChange={(e) => setManualQuote(e.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="manual-rationale">
-                  Why are you adding this event?
-                </label>
-                <textarea
-                  id="manual-rationale"
-                  required
-                  minLength={3}
-                  maxLength={2000}
-                  value={manualRationale}
-                  onChange={(e) => setManualRationale(e.target.value)}
-                />
-              </div>
-              <button disabled={busy}>Add for review</button>
-            </form>
-          </details>
-        )}
-      {detail && <ReportFacts key={detail.id} token={token} documentId={detail.id}
-        datasetId={detail.dataset_id} page={page} canReview={canReview}
-        approvalAllowed={Boolean(detail.approval_allowed)} />}
+        </div>
+      )}
+
+      {/* Tab 3: Shift Voice Memo */}
+      {activeTab === "voice" && canUpload && (
+        <div className="tab-content-panel">
+          <div className="tab-section-intro">
+            <h2>Capture Field Audio Shift Note</h2>
+            <p className="footnote">
+              Record a spoken shift note for verification. The transcript will enter the evidence review queue for human sign-off. Audio is stored locally for 30 days.
+            </p>
+          </div>
+          <VoiceMemo
+            token={token}
+            options={options}
+            asrAvailable={Boolean(identity?.voice_local_asr_available)}
+            onSaved={(id) => {
+              setSelected(id);
+              setDetail(null);
+              setRevision((value) => value + 1);
+              setActiveTab("workbench");
+              setNotice("Voice memo received. The transcript has entered the evidence-review queue.");
+            }}
+          />
+        </div>
+      )}
     </section>
   );
 }

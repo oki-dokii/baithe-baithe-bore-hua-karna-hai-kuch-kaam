@@ -5,6 +5,9 @@ const Analytics = lazy(() => import("./Analytics"));
 import Operations from "./Operations";
 import Prediction from "./Prediction";
 import ReportQuestions from "./ReportQuestions";
+import { ProductTour, isTourDone, markTourDone } from "./ProductTour";
+import { ROLES, ROLE_LIST, RoleIcon, UserRole, View } from "./roles";
+import DevConsole from "./DevConsole";
 import "./styles.css";
 
 type Component = { state: string; detail: string | null };
@@ -134,8 +137,6 @@ const IconClose = () => (
   </svg>
 );
 
-type View = "operations" | "intelligence" | "analytics" | "questions" | "documents" | "foundation" | "prediction";
-
 const NAV_GROUPS = [
   {
     label: "Monitor",
@@ -171,22 +172,112 @@ const VIEW_TITLES: Record<View, string> = {
   prediction: "Evaluate",
 };
 
+// ── Role Switcher Modal (Live Demo Testing) ───────────────────
+function RoleSwitcherModal({
+  open,
+  onClose,
+  activeRole,
+  onSelectRole,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeRole: UserRole;
+  onSelectRole: (role: UserRole) => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="tour-backdrop" onClick={onClose} style={{ zIndex: 10000 }}>
+      <div
+        className="tour-card"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "min(500px, 94vw)", padding: "24px" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--text-primary)" }}>
+              Switch Demo Role
+            </h3>
+            <p style={{ margin: "2px 0 0", fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+              Switch perspectives to test role-based workspace filtering
+            </p>
+          </div>
+          <button
+            type="button"
+            className="tour-btn-ghost"
+            onClick={onClose}
+            style={{ padding: "4px 8px", cursor: "pointer", display: "grid", placeItems: "center" }}
+            aria-label="Close switcher"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="role-selector-list" style={{ marginBottom: "16px" }}>
+          {ROLE_LIST.map((r) => {
+            const rDef = ROLES[r];
+            const isSelected = activeRole === r;
+            return (
+              <div
+                key={r}
+                className={`role-card-item${isSelected ? " active" : ""}${r === "superadmin" ? " role-superadmin" : ""}`}
+                onClick={() => {
+                  onSelectRole(r);
+                  onClose();
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <span className="role-card-icon">
+                  <RoleIcon role={r} size={15} />
+                </span>
+                <div className="role-card-content">
+                  <div className="role-card-top">
+                    <span className="role-card-name">{rDef.name}</span>
+                    <span className={`badge ${rDef.badgeClass}`}>{rDef.badge}</span>
+                  </div>
+                  <p className="role-card-desc">{rDef.shortDesc}</p>
+                </div>
+                <div className="role-radio-mark" aria-hidden="true" />
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ textAlign: "right" }}>
+          <button type="button" className="btn btn-sm btn-outline" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Landing ────────────────────────────────────────────────────
 function Landing({
   onConnect,
   loading,
   error,
 }: {
-  onConnect: (token: string) => void;
+  onConnect: (token: string, role: UserRole) => void;
   loading: boolean;
   error: string;
 }) {
-  const [token, setToken] = useState("");
+  const [selectedRole, setSelectedRole] = useState<UserRole>("engineer");
+  const [token, setToken] = useState(ROLES.engineer.token);
+  const [showCustomToken, setShowCustomToken] = useState(false);
+
+  function handleSelectRole(role: UserRole) {
+    setSelectedRole(role);
+    setToken(ROLES[role].token);
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    onConnect(token.trim());
-    setToken("");
+    onConnect(token.trim(), selectedRole);
   }
 
   const depthTicks = [
@@ -250,9 +341,8 @@ function Landing({
 
           <h2 className="auth-title">Connect to platform</h2>
           <p className="auth-desc">
-            Enter your local access token to connect. Reviewers can inspect
-            source pages and approve evidence; viewers see approved claims.
-            Your token stays in memory only.
+            Select your demo role to experience role-based workspace filtering.
+            Each role accesses only its authorized operational and analytical views.
           </p>
 
           {error && (
@@ -265,18 +355,105 @@ function Landing({
             </div>
           )}
 
-          <div className="field">
-            <label className="field-label" htmlFor="access-token">Local access token</label>
-            <input
-              id="access-token"
-              type="password"
-              required
-              minLength={16}
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Enter token (min 16 chars)"
-              autoComplete="current-password"
-            />
+          {/* Role selector */}
+          <div className="role-selector-label">
+            <span>Select Demo Role</span>
+            <span style={{ color: selectedRole === "superadmin" ? "#c084fc" : "var(--teal-glow)" }}>
+              {ROLES[selectedRole].name}
+            </span>
+          </div>
+
+          <div className="role-selector-list" role="radiogroup" aria-label="Select role">
+            {ROLE_LIST.map((r) => {
+              const rDef = ROLES[r];
+              const isSelected = selectedRole === r;
+              return (
+                <div
+                  key={r}
+                  className={`role-card-item${isSelected ? " active" : ""}${r === "superadmin" ? " role-superadmin" : ""}`}
+                  onClick={() => handleSelectRole(r)}
+                  onDoubleClick={submit}
+                  role="radio"
+                  aria-checked={isSelected}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleSelectRole(r);
+                    }
+                  }}
+                >
+                  <span className="role-card-icon">
+                    <RoleIcon role={r} size={16} />
+                  </span>
+                  <div className="role-card-content">
+                    <div className="role-card-top">
+                      <span className="role-card-name">
+                        {rDef.name}
+                      </span>
+                      <span className={`badge ${rDef.badgeClass}`}>
+                        {rDef.badge}
+                      </span>
+                    </div>
+                    <p className="role-card-desc">{rDef.shortDesc}</p>
+                  </div>
+                  <div className="role-radio-mark" aria-hidden="true" />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Assigned workspaces preview */}
+          <div className="assigned-workspaces-box">
+            <div className="assigned-workspaces-title">
+              Assigned Workspaces for {ROLES[selectedRole].shortTitle}
+            </div>
+            <div className="assigned-workspaces-pills">
+              {ROLES[selectedRole].allowedViewLabels.map((lbl) => (
+                <span
+                  key={lbl}
+                  className={`assigned-pill${selectedRole === "superadmin" ? " superadmin" : ""}`}
+                >
+                  {lbl}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Collapsible custom token input */}
+          <div style={{ marginBottom: "14px" }}>
+            <button
+              type="button"
+              onClick={() => setShowCustomToken(!showCustomToken)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
+                fontSize: "0.74rem",
+                cursor: "pointer",
+                padding: "2px 0",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span>{showCustomToken ? "Hide token parameter" : "Advanced: Edit bearer token"}</span>
+            </button>
+            {showCustomToken && (
+              <div className="field" style={{ marginTop: "8px" }}>
+                <input
+                  id="access-token"
+                  type="text"
+                  required
+                  minLength={16}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Enter token (min 16 chars)"
+                  className="mono-sm"
+                  style={{ fontSize: "0.78rem" }}
+                  autoComplete="current-password"
+                />
+              </div>
+            )}
           </div>
 
           <button
@@ -284,13 +461,17 @@ function Landing({
             type="submit"
             id="connect-btn"
             disabled={loading || token.length < 16}
+            style={selectedRole === "superadmin" ? {
+              background: "linear-gradient(135deg, #7e22ce, #a855f7)",
+              borderColor: "#c084fc",
+              boxShadow: "0 4px 18px rgba(168, 85, 247, 0.4)",
+            } : undefined}
           >
-            {loading ? "Connecting…" : "Connect to NWIS"}
+            {loading ? "Connecting…" : `Launch as ${ROLES[selectedRole].shortTitle} →`}
           </button>
 
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "14px", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
-            SIMULATED · Synthetic demo rehearsal. No trained risk model or live eRTMAC.
-            Synthetic examples establish behavior, not predictive accuracy.
+            SIMULATED · Synthetic demo rehearsal. Role-based view authorization active.
           </p>
         </form>
       </div>
@@ -480,6 +661,9 @@ function Sidebar({
   status,
   collapsed,
   onToggleCollapse,
+  onOpenTour,
+  userRole,
+  onOpenRoleSwitcher,
 }: {
   view: View;
   setView: (v: View) => void;
@@ -488,6 +672,9 @@ function Sidebar({
   status: Status;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onOpenTour: () => void;
+  userRole: UserRole;
+  onOpenRoleSwitcher: () => void;
 }) {
   const isSynthetic = status.source_mode === "SYNTHETIC";
 
@@ -517,40 +704,71 @@ function Sidebar({
         </div>
       )}
 
-      {/* Navigation groups */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} className="nav-group">
-            <span className="nav-group-label">{group.label}</span>
-            {group.items.map(({ id, label, plate, desc, Icon }) => (
-              <button
-                key={id}
-                className={`nav-item${view === id ? " active" : ""}`}
-                onClick={() => setView(id)}
-                aria-label={`${plate} ${label} — ${desc}`}
-                aria-current={view === id ? "page" : undefined}
-                title={collapsed ? `${plate} · ${label} — ${desc}` : undefined}
-              >
-                <span className="nav-item-icon"><Icon /></span>
-                <span className="nav-item-text">
-                  <span className="nav-item-label">
-                    <span className="nav-item-name">{label}</span>
-                    <span className="nav-item-plate">{plate}</span>
-                  </span>
-                  <span className="nav-item-desc">{desc}</span>
-                </span>
-              </button>
-            ))}
-            {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+      {/* Active role block with quick switcher */}
+      {!collapsed && (
+        <div className="sidebar-role-indicator" title={ROLES[userRole].fullDesc}>
+          <div className="sidebar-role-info">
+            <span className="sidebar-role-icon">
+              <RoleIcon role={userRole} size={15} />
+            </span>
+            <div className="sidebar-role-text">
+              <span className="sidebar-role-title">{ROLES[userRole].name}</span>
+              <span className="sidebar-role-badge-tag">{ROLES[userRole].badge}</span>
+            </div>
           </div>
-        ))}
+          <button
+            type="button"
+            className="sidebar-role-switch-btn"
+            onClick={onOpenRoleSwitcher}
+            title="Switch demo role"
+            aria-label="Switch demo role"
+          >
+            Switch
+          </button>
+        </div>
+      )}
+
+      {/* Navigation groups (strictly filtered by role) */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
+        {NAV_GROUPS.map((group, gi) => {
+          const visibleItems = group.items.filter((item) =>
+            ROLES[userRole].allowedViews.includes(item.id)
+          );
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div key={gi} className="nav-group">
+              <span className="nav-group-label">{group.label}</span>
+              {visibleItems.map(({ id, label, plate, desc, Icon }) => (
+                <button
+                  key={id}
+                  className={`nav-item${view === id ? " active" : ""}`}
+                  onClick={() => setView(id)}
+                  aria-label={`${plate} ${label} — ${desc}`}
+                  aria-current={view === id ? "page" : undefined}
+                  title={collapsed ? `${plate} · ${label} — ${desc}` : undefined}
+                >
+                  <span className="nav-item-icon"><Icon /></span>
+                  <span className="nav-item-text">
+                    <span className="nav-item-label">
+                      <span className="nav-item-name">{label}</span>
+                      <span className="nav-item-plate">{plate}</span>
+                    </span>
+                    <span className="nav-item-desc">{desc}</span>
+                  </span>
+                </button>
+              ))}
+              {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+            </div>
+          );
+        })}
       </div>
 
       {/* Bottom area */}
       <div className="sidebar-bottom">
         <button
           className="nav-item nav-item-muted"
-          onClick={() => {}}
+          onClick={onOpenTour}
           title="Take a tour of NWIS"
           aria-label="Take a tour of NWIS"
         >
@@ -597,6 +815,9 @@ function MobileDrawer({
   status,
   open,
   onClose,
+  onOpenTour,
+  userRole,
+  onOpenRoleSwitcher,
 }: {
   view: View;
   setView: (v: View) => void;
@@ -605,6 +826,9 @@ function MobileDrawer({
   status: Status;
   open: boolean;
   onClose: () => void;
+  onOpenTour: () => void;
+  userRole: UserRole;
+  onOpenRoleSwitcher: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const isSynthetic = status.source_mode === "SYNTHETIC";
@@ -668,37 +892,67 @@ function MobileDrawer({
           </div>
         )}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px" }}>
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={gi} className="nav-group" style={{ padding: 0 }}>
-              <span className="nav-group-label">{group.label}</span>
-              {group.items.map(({ id, label, plate, desc, Icon }) => (
-                <button
-                  key={id}
-                  className={`nav-item${view === id ? " active" : ""}`}
-                  onClick={() => navigate(id)}
-                  aria-label={`${plate} ${label} — ${desc}`}
-                  aria-current={view === id ? "page" : undefined}
-                >
-                  <span className="nav-item-icon"><Icon /></span>
-                  <span className="nav-item-text">
-                    <span className="nav-item-label">
-                      <span className="nav-item-name">{label}</span>
-                      <span className="nav-item-plate">{plate}</span>
-                    </span>
-                    <span className="nav-item-desc">{desc}</span>
-                  </span>
-                </button>
-              ))}
-              {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+        {/* Role indicator in mobile drawer */}
+        <div className="sidebar-role-indicator" style={{ margin: "8px 12px 4px" }}>
+          <div className="sidebar-role-info">
+            <span className="sidebar-role-icon">
+              <RoleIcon role={userRole} size={15} />
+            </span>
+            <div className="sidebar-role-text">
+              <span className="sidebar-role-title">{ROLES[userRole].name}</span>
+              <span className="sidebar-role-badge-tag">{ROLES[userRole].badge}</span>
             </div>
-          ))}
+          </div>
+          <button
+            type="button"
+            className="sidebar-role-switch-btn"
+            onClick={() => {
+              onClose();
+              onOpenRoleSwitcher();
+            }}
+          >
+            Switch
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px" }}>
+          {NAV_GROUPS.map((group, gi) => {
+            const visibleItems = group.items.filter((item) =>
+              ROLES[userRole].allowedViews.includes(item.id)
+            );
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={gi} className="nav-group" style={{ padding: 0 }}>
+                <span className="nav-group-label">{group.label}</span>
+                {visibleItems.map(({ id, label, plate, desc, Icon }) => (
+                  <button
+                    key={id}
+                    className={`nav-item${view === id ? " active" : ""}`}
+                    onClick={() => navigate(id)}
+                    aria-label={`${plate} ${label} — ${desc}`}
+                    aria-current={view === id ? "page" : undefined}
+                  >
+                    <span className="nav-item-icon"><Icon /></span>
+                    <span className="nav-item-text">
+                      <span className="nav-item-label">
+                        <span className="nav-item-name">{label}</span>
+                        <span className="nav-item-plate">{plate}</span>
+                      </span>
+                      <span className="nav-item-desc">{desc}</span>
+                    </span>
+                  </button>
+                ))}
+                {gi < NAV_GROUPS.length - 1 && <div className="nav-sep" />}
+              </div>
+            );
+          })}
         </div>
 
         <div className="sidebar-bottom">
           <button
             className="nav-item nav-item-muted"
-            onClick={onClose}
+            onClick={() => { onOpenTour(); onClose(); }}
             aria-label="Take a tour of NWIS"
           >
             <span className="nav-item-icon"><IconHelp /></span>
@@ -730,14 +984,18 @@ function ContextBar({
   selected,
   streamMode,
   view,
+  userRole,
   onMenuOpen,
+  onOpenRoleSwitcher,
 }: {
   status: Status;
   wells: Well[];
   selected: string;
   streamMode?: string;
   view: View;
+  userRole: UserRole;
   onMenuOpen: () => void;
+  onOpenRoleSwitcher: () => void;
 }) {
   const w = wells.find((well) => well.id === selected);
   const isReplay = status.source_mode === "SYNTHETIC";
@@ -785,6 +1043,19 @@ function ContextBar({
         <span className="ctx-value">{status.environment.toUpperCase()}</span>
       </div>
 
+      {/* Role Chip with switch trigger */}
+      <div
+        className="ctx-chip ctx-role-chip"
+        title={`${ROLES[userRole].name}: ${ROLES[userRole].shortDesc} (Click to switch)`}
+        style={{ cursor: "pointer" }}
+        onClick={onOpenRoleSwitcher}
+      >
+        <span className="ctx-label">Role</span>
+        <span className={`ctx-value ${userRole === "superadmin" ? "dev" : "teal"}`}>
+          {ROLES[userRole].shortTitle.toUpperCase()}
+        </span>
+      </div>
+
       <div className="ctx-spacer" />
 
       {/* Current view indicator */}
@@ -800,7 +1071,7 @@ function ContextBar({
 
       {streamMode && (
         <span className={`ctx-stream-badge ${streamMode === "ws" ? "ws" : "http"}`}>
-          {streamMode === "ws" ? "⚡ WebSocket" : "↺ HTTP"}
+          {streamMode === "ws" ? "WS LIVE" : "HTTP POLLING"}
         </span>
       )}
       <div className="ctx-chip" style={{ borderRight: "none" }}>
@@ -814,8 +1085,41 @@ function ContextBar({
 }
 
 // ── Main App ───────────────────────────────────────────────────
+// ── Access Denied panel ────────────────────────────────────────
+function AccessDenied({ view, role }: { view: View; role: UserRole }) {
+  return (
+    <div className="workspace" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{
+        maxWidth: 420,
+        textAlign: "center",
+        padding: "48px 32px",
+        background: "var(--surface-2)",
+        borderRadius: 12,
+        border: "1px solid var(--border)",
+      }}>
+        <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="var(--accent-red, #e05)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v5M12 16v.5" strokeLinecap="round" />
+        </svg>
+        <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+          Access Restricted
+        </div>
+        <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          The <strong style={{ color: "var(--text-primary)" }}>{VIEW_TITLES[view]}</strong> workspace is
+          not assigned to the <strong style={{ color: "var(--text-primary)" }}>{ROLES[role].name}</strong> role.
+        </div>
+        <div style={{ marginTop: 20, fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+          Permitted workspaces: {ROLES[role].allowedViewLabels.join(" · ")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setEntered] = useState("");
+  const [userRole, setUserRole] = useState<UserRole>("engineer");
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [wells, setWells] = useState<Well[]>([]);
   const [selected, setSelected] = useState("");
@@ -824,8 +1128,38 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>("operations");
+
+  // Guarded navigation – silently redirects to default if view not allowed
+  function navigateTo(nextView: View) {
+    const allowed = ROLES[userRole].allowedViews;
+    setView(allowed.includes(nextView) ? nextView : ROLES[userRole].defaultView);
+  }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+
+  function openTour() { setTourStep(0); setTourOpen(true); }
+  function closeTour() { markTourDone(); setTourOpen(false); }
+  function tourNext() {
+    if (tourStep >= 5) { closeTour(); }
+    else { setTourStep((s) => s + 1); }
+  }
+  function tourBack() { setTourStep((s) => Math.max(0, s - 1)); }
+
+  function handleConnect(newToken: string, role: UserRole) {
+    setUserRole(role);
+    setEntered(newToken);
+    setView(ROLES[role].defaultView);
+  }
+
+  function switchRole(newRole: UserRole) {
+    setUserRole(newRole);
+    setEntered(ROLES[newRole].token);
+    if (!ROLES[newRole].allowedViews.includes(view)) {
+      setView(ROLES[newRole].defaultView);
+    }
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -845,6 +1179,10 @@ export default function App() {
             page.items[0]?.id ??
             "",
         );
+        // Auto-show tour on first visit
+        if (!isTourDone()) {
+          setTimeout(() => setTourOpen(true), 800);
+        }
       })
       .catch((e: Error) => active && setError(e.message))
       .finally(() => active && setLoading(false));
@@ -875,7 +1213,7 @@ export default function App() {
   if (!status) {
     return (
       <Landing
-        onConnect={setEntered}
+        onConnect={handleConnect}
         loading={loading}
         error={error}
       />
@@ -889,24 +1227,59 @@ export default function App() {
       {/* Descriptive sidebar */}
       <Sidebar
         view={view}
-        setView={setView}
+        setView={navigateTo}
         disconnect={disconnect}
         well={activeWell}
         status={status}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        onOpenTour={openTour}
+        userRole={userRole}
+        onOpenRoleSwitcher={() => setShowRoleSwitcher(true)}
       />
 
       {/* Mobile drawer */}
       <MobileDrawer
         view={view}
-        setView={setView}
+        setView={navigateTo}
         disconnect={disconnect}
         well={activeWell}
         status={status}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        onOpenTour={openTour}
+        userRole={userRole}
+        onOpenRoleSwitcher={() => setShowRoleSwitcher(true)}
       />
+
+      {/* Product Tour */}
+      <ProductTour
+        open={tourOpen}
+        step={tourStep}
+        onNext={tourNext}
+        onBack={tourBack}
+        onSkip={closeTour}
+      />
+
+      {/* Role Switcher Modal */}
+      <RoleSwitcherModal
+        open={showRoleSwitcher}
+        onClose={() => setShowRoleSwitcher(false)}
+        activeRole={userRole}
+        onSelectRole={switchRole}
+      />
+
+      {/* Super Admin Developer Console */}
+      {userRole === "superadmin" && (
+        <DevConsole
+          token={token}
+          activeRole={userRole}
+          onImpersonate={switchRole}
+          onResetTour={() => {
+            localStorage.removeItem("nwis_tour_done");
+          }}
+        />
+      )}
 
       {/* Main body */}
       <div className={`app-body${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -915,12 +1288,16 @@ export default function App() {
           wells={wells}
           selected={selected}
           view={view}
+          userRole={userRole}
           onMenuOpen={() => setDrawerOpen(true)}
+          onOpenRoleSwitcher={() => setShowRoleSwitcher(true)}
         />
 
         <div className="main-canvas">
-          {view === "operations" ? (
-            <Operations token={token} />
+          {!ROLES[userRole].allowedViews.includes(view) ? (
+            <AccessDenied view={view} role={userRole} />
+          ) : view === "operations" ? (
+            <Operations token={token} onNavigate={(v) => navigateTo(v as View)} />
           ) : view === "documents" ? (
             <Documents token={token} />
           ) : view === "intelligence" ? (

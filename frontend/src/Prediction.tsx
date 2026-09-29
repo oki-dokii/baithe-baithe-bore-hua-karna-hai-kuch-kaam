@@ -433,7 +433,7 @@ export default function Prediction({ token }: { token: string }) {
                             marginBottom: "16px",
                           }}>
                             <span style={{ fontSize: "0.75rem", fontWeight: 600, display: "block", marginBottom: "4px", color: inference.is_alert ? "var(--red-bright)" : "var(--green-bright)" }}>
-                              {inference.is_alert ? "⚠ PROACTIVE MITIGATION PROTOCOL ACTIVATED" : "✓ NORMAL OPERATING MARGIN"}
+                              {inference.is_alert ? "PROACTIVE MITIGATION PROTOCOL ACTIVATED" : "NORMAL OPERATING MARGIN"}
                             </span>
                             <p style={{ fontSize: "0.78rem", color: "var(--text-primary)", lineHeight: 1.5 }}>
                               {inference.recommended_action}

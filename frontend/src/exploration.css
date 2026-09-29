@@ -1,2 +1,385 @@
-/* Exploration extras CSS — merged into global styles.css */
-/* This file is kept to avoid import errors in older components */
+/* ═══════════════════════════════════════════════════════════════
+   NWIS EXPLORATION & SUBSURFACE GRAPHS (DepthTrack, MudWindow, Mitigation)
+   ═══════════════════════════════════════════════════════════════ */
+
+.explore-panel {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--border, rgba(120, 140, 160, 0.2));
+  background: var(--surface-card, #111822);
+  border-radius: var(--r-md, 8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.explore-panel h2 {
+  margin: 4px 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.explore-panel .section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.explore-panel .section-heading > span {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--teal, #38b2ac);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Depth Track Multi-Lane SVG Graph */
+.depth-track-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border, rgba(120, 140, 160, 0.2));
+  border-radius: var(--r-sm, 6px);
+  margin: 16px 0;
+  padding: 12px 8px;
+  background: var(--surface-dark, #0a0e14);
+}
+
+.depth-track-scroll svg {
+  display: block;
+  width: 100%;
+  min-width: 820px;
+  height: auto;
+}
+
+/* Grid & Reference lines */
+.track-grid {
+  stroke: rgba(120, 140, 160, 0.22) !important;
+  stroke-width: 1 !important;
+  stroke-dasharray: 2 4;
+}
+
+.track-label {
+  fill: #94a3b8 !important;
+  font-family: var(--font-mono, monospace) !important;
+  font-size: 11px !important;
+}
+
+.track-lane {
+  fill: #5eead4 !important;
+  font-family: var(--font-mono, monospace) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Formation blocks */
+.track-formation {
+  fill: rgba(56, 178, 172, 0.25) !important;
+  stroke: #38b2ac !important;
+  stroke-width: 1.5 !important;
+  rx: 3px;
+  transition: fill 0.15s ease;
+}
+
+.track-formation:hover {
+  fill: rgba(56, 178, 172, 0.45) !important;
+}
+
+/* Event marker dots */
+.track-event {
+  fill: #f97316 !important;
+  stroke: #fff !important;
+  stroke-width: 2 !important;
+  cursor: pointer;
+  filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.7));
+  transition: transform 0.15s ease, fill 0.15s ease;
+}
+
+.track-event:hover {
+  fill: #ffedd5 !important;
+  transform-origin: center;
+}
+
+/* ROP (Rate of Penetration) curve */
+.track-rop {
+  fill: none !important;
+  stroke: #10b981 !important;
+  stroke-width: 2.5 !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.5));
+}
+
+/* Torque curve */
+.track-torque {
+  fill: none !important;
+  stroke: #eab308 !important;
+  stroke-width: 2.5 !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(234, 179, 8, 0.5));
+}
+
+/* Pore Pressure & Mud Window Envelope */
+.mud-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 14px 0 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.mud-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mud-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.mud-legend .mud-pore { color: #f43f5e; }
+.mud-legend .mud-frac { color: #10b981; }
+.mud-legend .mud-weight { color: #38b2ac; }
+.mud-legend .mud-ecd { color: #f59e0b; }
+
+.mud-envelope {
+  fill: rgba(56, 178, 172, 0.12) !important;
+  stroke: rgba(56, 178, 172, 0.35) !important;
+  stroke-width: 1 !important;
+}
+
+.mud-pore-line,
+.mud-frac-line,
+.mud-weight-line,
+.mud-ecd-line {
+  stroke-width: 2.5 !important;
+}
+
+.mud-pore-line {
+  stroke: #f43f5e !important;
+  filter: drop-shadow(0 0 4px rgba(244, 63, 94, 0.4));
+}
+
+.mud-frac-line {
+  stroke: #10b981 !important;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+}
+
+.mud-weight-line {
+  stroke: #38b2ac !important;
+  filter: drop-shadow(0 0 4px rgba(56, 178, 172, 0.4));
+}
+
+.mud-ecd-line {
+  stroke: #f59e0b !important;
+  stroke-dasharray: 6 4 !important;
+}
+
+/* Response Network Links (MitigationGraph) */
+.response-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 28px minmax(0, 1.3fr) 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--border, rgba(120, 140, 160, 0.15));
+  padding: 18px 0;
+  font-size: 0.8125rem;
+}
+
+.response-link div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.response-link small {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--teal, #38b2ac);
+  text-transform: uppercase;
+}
+
+.response-link strong {
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  overflow-wrap: anywhere;
+}
+
+.response-link span {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.75rem;
+}
+
+.response-link .response-arrow {
+  color: var(--teal-glow, #5eead4);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.response-link button {
+  margin-top: 6px;
+  align-self: flex-start;
+}
+
+@media (max-width: 820px) {
+  .response-link {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .response-link .response-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+/* ── Explore Workspace Tabs ───────────────────────────────────── */
+.explore-tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0 16px;
+  border-bottom: 1px solid var(--border, rgba(120, 140, 160, 0.2));
+  padding-bottom: 2px;
+}
+
+.explore-tab-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.explore-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-muted, #94a3b8);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.explore-tab-btn:hover {
+  color: var(--text-primary, #f1f5f9);
+  background: var(--glass-2, rgba(255, 255, 255, 0.04));
+}
+
+.explore-tab-btn.active {
+  color: var(--teal-glow, #5eead4);
+  font-weight: 600;
+  border-bottom-color: var(--teal, #38b2ac);
+  background: rgba(34, 168, 178, 0.08);
+}
+
+.explore-tab-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono, monospace);
+  border-radius: 10px;
+  background: var(--glass-3, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.explore-tab-btn.active .explore-tab-badge {
+  background: rgba(34, 168, 178, 0.25);
+  color: var(--teal-glow, #5eead4);
+}
+
+/* Selected offset summary banner */
+.selected-analogue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+  margin: 16px 0;
+  background: rgba(18, 30, 44, 0.85);
+  border: 1px solid var(--border-bright, rgba(120, 140, 160, 0.3));
+  border-left: 4px solid var(--teal, #38b2ac);
+  border-radius: var(--r-md, 8px);
+}
+
+.analogue-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analogue-banner-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.analogue-banner-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.analogue-banner-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: var(--r-sm, 4px);
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.wellbore-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--abyss, #060e18);
+  border: 1px solid var(--border, rgba(120, 140, 160, 0.2));
+  border-radius: var(--r-sm, 4px);
+  padding: 2px;
+  gap: 2px;
+}
+
+.wellbore-toggle-btn {
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono, monospace);
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wellbore-toggle-btn.active {
+  background: var(--teal, #38b2ac);
+  color: #060e18;
+  font-weight: 700;
+}
+

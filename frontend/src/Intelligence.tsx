@@ -1,8 +1,26 @@
-import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { DepthTrack, MudWindow } from "./ExplorationExtras";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import "./india-map.css";
+import { DepthTrack, MudWindow, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
 import OffsetBrief, { OffsetBriefData } from "./OffsetBrief";
+import IndiaWellMap from "./IndiaMap";
+import { ALL_SYNTHETIC_WELLS, haversineKm } from "./syntheticWellsData";
+
+type SearchHit = {
+  id: string;
+  well_name: string;
+  event_type: string;
+  description: string;
+  citations: Citation[];
+};
+
+type SearchResult = {
+  items: SearchHit[];
+  next_offset: number | null;
+  abstention_reason: string | null;
+  retrieval_mode: string;
+  semantic_model: string | null;
+  notice: string;
+};
 
 type Well = {
   id: string;
@@ -118,128 +136,6 @@ async function request<T>(
   return data;
 }
 
-function WellMap({
-  active,
-  candidates,
-  radius,
-  proximityBasis,
-  selectedId,
-  onSelect,
-}: {
-  active: Well;
-  candidates: Analogue[];
-  radius: number;
-  proximityBasis: "surface" | "terminal_bottomhole";
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  const root = useRef<HTMLDivElement>(null);
-  const callback = useRef(onSelect);
-  callback.current = onSelect;
-
-  useEffect(() => {
-    if (!root.current) return;
-    const map = L.map(root.current, {
-      center: [active.latitude, active.longitude],
-      zoom: 12,
-      scrollWheelZoom: false,
-      attributionControl: false,
-    });
-
-    const bounds = proximityBasis === "surface"
-      ? L.circle([active.latitude, active.longitude], {
-          radius: radius * 1000,
-          color: "#78896d",
-          weight: 1.5,
-          dashArray: "4 6",
-          fillColor: "#e1e8d9",
-          fillOpacity: 0.35,
-        }).addTo(map).getBounds()
-      : L.latLngBounds([active, ...candidates].map((well) => [well.latitude, well.longitude]));
-
-    if (bounds.isValid() && (proximityBasis === "surface" || candidates.length))
-      map.fitBounds(bounds.pad(0.15), { padding: [35, 35], maxZoom: 13 });
-
-    const gridBounds = bounds.pad(0.5);
-    const step = Math.max(
-      0.002,
-      Math.pow(
-        10,
-        Math.floor(Math.log10(Math.max(0.01, gridBounds.getNorth() - gridBounds.getSouth()) / 5)),
-      ),
-    );
-
-    for (
-      let lat = Math.floor(gridBounds.getSouth() / step) * step;
-      lat <= gridBounds.getNorth();
-      lat += step
-    )
-      L.polyline(
-        [
-          [lat, gridBounds.getWest()],
-          [lat, gridBounds.getEast()],
-        ],
-        { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
-      ).addTo(map);
-
-    for (
-      let lon = Math.floor(gridBounds.getWest() / step) * step;
-      lon <= gridBounds.getEast();
-      lon += step
-    )
-      L.polyline(
-        [
-          [gridBounds.getSouth(), lon],
-          [gridBounds.getNorth(), lon],
-        ],
-        { color: "#c4ccbb", weight: 1, opacity: 0.5, interactive: false },
-      ).addTo(map);
-
-    for (const [index, well] of [active, ...candidates].entries()) {
-      const current = well.id === active.id;
-      const isSelected = well.id === selectedId;
-      const label = document.createElement("span");
-      label.textContent = `${well.name}${current ? " · active" : isSelected ? " · selected" : ""}`;
-      
-      const marker = L.circleMarker([well.latitude, well.longitude], {
-        radius: current ? 10 : isSelected ? 9 : 7,
-        fillColor: current ? "#272c27" : isSelected ? "#3a8274" : "#617650",
-        color: isSelected ? "#52b7a5" : "#fbfaf5",
-        weight: isSelected ? 3 : 2,
-        fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindTooltip(label, {
-          permanent: current || isSelected,
-          direction: current ? "left" : index % 2 ? "top" : "bottom",
-          offset: current ? [-9, 0] : index % 2 ? [0, -9] : [0, 9],
-        });
-
-      if (!current) {
-        marker.on("click", () => callback.current(well.id));
-      }
-    }
-
-    L.control.scale({ imperial: false }).addTo(map);
-    const observer = new ResizeObserver(() => map.invalidateSize());
-    observer.observe(root.current);
-
-    return () => {
-      observer.disconnect();
-      map.remove();
-    };
-  }, [active, candidates, radius, proximityBasis, selectedId]);
-
-  return (
-    <div
-      className="well-map"
-      ref={root}
-      role="region"
-      aria-label="Interactive geographic well map. Use the adjacent well list for keyboard selection."
-    />
-  );
-}
-
 export default function Intelligence({ token }: { token: string }) {
   const [wells, setWells] = useState<Well[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -252,7 +148,25 @@ export default function Intelligence({ token }: { token: string }) {
   const [brief, setBrief] = useState<OffsetBriefData | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [selected, setSelected] = useState("");
-  const [exploreView, setExploreView] = useState<"atlas" | "subsurface">("atlas");
+  const [exploreTab, setExploreTab] = useState<"incidents" | "depth" | "pressure" | "search" | "planning" | "brief">("incidents");
+  const [inspectOffset, setInspectOffset] = useState(false);
+
+  // Filter states
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [formationFilter, setFormationFilter] = useState<"all" | "shared_only">("all");
+
+  // Scenario planning state
+  const [planningPoint, setPlanningPoint] = useState<PlanningPoint | null>(null);
+  const [planRadius, setPlanRadius] = useState(10);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hazardFilter, setHazardFilter] = useState("");
+  const [minMd, setMinMd] = useState("");
+  const [maxMd, setMaxMd] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   // Case details
   const [record, setRecord] = useState<Case | null>(null);
@@ -261,8 +175,49 @@ export default function Intelligence({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
 
   const active = wells.find((w) => w.id === activeId);
-  const candidate = comparison?.items.find((w) => w.id === selected);
+
+  // Filtered offset candidates based on formation and event filters
+  const allCandidates = comparison?.items ?? [];
+  const filteredCandidates = allCandidates.filter((w) => {
+    if (formationFilter === "shared_only" && !w.components.same_reviewed_formation) {
+      return false;
+    }
+    if (eventTypeFilter !== "all") {
+      const match = w.mappings.some((m) =>
+        m.event_type.toLowerCase().includes(eventTypeFilter.toLowerCase())
+      );
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  const candidate = filteredCandidates.find((w) => w.id === selected) ?? comparison?.items.find((w) => w.id === selected);
+  const selectedSynthWell = ALL_SYNTHETIC_WELLS.find((w) => w.id === selected);
+  const [sidebarView, setSidebarView] = useState<"radius" | "basins">("radius");
   const caseSequence = useRef(0);
+
+  // Synchronize selection when filtered list changes (preserve selected synthetic basin wells)
+  useEffect(() => {
+    if (
+      filteredCandidates.length > 0 &&
+      !filteredCandidates.some((w) => w.id === selected) &&
+      !ALL_SYNTHETIC_WELLS.some((w) => w.id === selected)
+    ) {
+      setSelected(filteredCandidates[0].id);
+    }
+  }, [filteredCandidates, selected]);
+
+  // Close case drawer on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && record) {
+        setRecord(null);
+        setSource(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [record]);
 
   useEffect(() => {
     let live = true;
@@ -400,6 +355,40 @@ export default function Intelligence({ token }: { token: string }) {
     }
   }
 
+  /* ── Perform search on verified DDR / knowledge records ──── */
+  async function performSearch(e?: FormEvent, offset?: number) {
+    e?.preventDefault();
+    if (!active?.dataset_id) return;
+    setSearching(true);
+    setSearchError("");
+    try {
+      const params = new URLSearchParams({
+        dataset_id: active.dataset_id,
+      });
+      if (searchQuery.trim()) params.set("query", searchQuery.trim());
+      if (hazardFilter) params.set("event_type", hazardFilter);
+      if (minMd) params.set("min_md_m", minMd);
+      if (maxMd) params.set("max_md_m", maxMd);
+      if (offset != null) params.set("offset", String(offset));
+      const data = await request<SearchResult>(
+        token,
+        `/knowledge/search?${params.toString()}`,
+      );
+      if (offset && searchResults) {
+        setSearchResults({
+          ...data,
+          items: [...searchResults.items, ...data.items],
+        });
+      } else {
+        setSearchResults(data);
+      }
+    } catch (err) {
+      setSearchError((err as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
   return (
     <section className="intelligence-workspace">
       {/* Workspace Header */}
@@ -479,6 +468,34 @@ export default function Intelligence({ token }: { token: string }) {
             onChange={(e) => setRadius(Number(e.target.value))}
           />
         </div>
+        <div>
+          <label htmlFor="atlas-hazard">Hazard / event filter</label>
+          <select
+            id="atlas-hazard"
+            value={eventTypeFilter}
+            onChange={(e) => setEventTypeFilter(e.target.value)}
+          >
+            <option value="all">All recorded events</option>
+            <option value="kick">Kick / Well influx</option>
+            <option value="loss">Losses / Mud loss</option>
+            <option value="stuck">Stuck pipe</option>
+            <option value="tight">Tight hole / Pack-off</option>
+            <option value="pressure">Overpressure</option>
+            <option value="fish">Fishing operation</option>
+            <option value="cement">Cementing issue</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="atlas-formation-match">Formation match</label>
+          <select
+            id="atlas-formation-match"
+            value={formationFilter}
+            onChange={(e) => setFormationFilter(e.target.value as "all" | "shared_only")}
+          >
+            <option value="all">All offset wells</option>
+            <option value="shared_only">Shared reviewed formation only</option>
+          </select>
+        </div>
       </div>
 
       {loading && (
@@ -500,333 +517,863 @@ export default function Intelligence({ token }: { token: string }) {
               ` ${comparison.excluded_unresolved_survey_count} candidate(s) excluded for unresolved survey geometry.`}
           </p>
 
-          <div className="brief-actions">
-            <button type="button" onClick={prepareBrief} disabled={briefLoading}>
-              {briefLoading ? "Preparing cited brief…" : "Prepare one-page offset brief"}
-            </button>
-            {brief && <button type="button" onClick={() => window.print()}>Print / save as PDF</button>}
-          </div>
+          <div className="atlas-map-grid">
+            <IndiaWellMap
+              active={active}
+              candidates={filteredCandidates.map((w) => ({
+                ...w,
+                surface_distance_m: w.surface_distance_m,
+                similarity_score: w.similarity_score,
+                event_count: w.mappings.length,
+              }))}
+              radius={radius}
+              proximityBasis={proximityBasis}
+              selectedId={selected}
+              onSelect={(id) => {
+                setSelected(id);
+                setRecord(null);
+                setSource(null);
+                caseSequence.current++;
+              }}
+              planningPoint={planningPoint}
+              onMapClick={(lat, lng) => {
+                setPlanningPoint({
+                  latitude: Number(lat.toFixed(4)),
+                  longitude: Number(lng.toFixed(4)),
+                });
+                if (exploreTab !== "planning") {
+                  setExploreTab("planning");
+                }
+              }}
+            />
 
-          {brief && <OffsetBrief data={brief} />}
-
-          {/* Subview Toggle */}
-          <div className="subview-tab-bar" role="tablist" aria-label="Explore views">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={exploreView === "atlas"}
-              className={`subview-tab-btn ${exploreView === "atlas" ? "active" : ""}`}
-              onClick={() => setExploreView("atlas")}
-            >
-              <span className="tab-num">01</span>
-              <span className="tab-title">Offset Atlas & Analogues</span>
-              <span className="tab-desc">Geographic map & incident mappings</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={exploreView === "subsurface"}
-              className={`subview-tab-btn ${exploreView === "subsurface" ? "active" : ""}`}
-              onClick={() => setExploreView("subsurface")}
-            >
-              <span className="tab-num">02</span>
-              <span className="tab-title">Subsurface Logs</span>
-              <span className="tab-desc">Depth register & pore pressure envelope</span>
-            </button>
-          </div>
-
-          {/* Subview 1: The Offset Atlas Grid & Selected Analogue Comparison */}
-          {exploreView === "atlas" && (
-            <>
-              <div className="atlas-grid">
-                <div className="map-frame">
-                  <WellMap
-                    active={active}
-                    candidates={comparison.items}
-                    radius={radius}
-                    proximityBasis={proximityBasis}
-                    selectedId={selected}
-                    onSelect={(id) => {
-                      setSelected(id);
-                      setRecord(null);
-                      setSource(null);
-                      caseSequence.current++;
-                    }}
-                  />
-                  <div className="map-caption">
-                    <span>
-                      WGS84 · {active.latitude.toFixed(4)}°,{" "}
-                      {active.longitude.toFixed(4)}°
-                    </span>
-                    <span>Click markers to compare offset analogues within {radius} km</span>
-                  </div>
+            <aside className="analogue-index">
+              <div className="panel-heading" style={{ flexWrap: "wrap", gap: "6px" }}>
+                <h2>{sidebarView === "radius" ? "Offset Wells" : "India Basins"}</h2>
+                <div style={{ display: "flex", gap: "4px" }}>
+                  <button
+                    type="button"
+                    className={`map-btn ${sidebarView === "radius" ? "map-btn-active-toggle" : ""}`}
+                    style={{ fontSize: "0.65rem", padding: "2px 7px" }}
+                    onClick={() => setSidebarView("radius")}
+                    title="Show wells within active search radius"
+                  >
+                    Radius ({filteredCandidates.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`map-btn ${sidebarView === "basins" ? "map-btn-active-toggle" : ""}`}
+                    style={{ fontSize: "0.65rem", padding: "2px 7px" }}
+                    onClick={() => setSidebarView("basins")}
+                    title="Show all 32 synthetic wells across 6 Indian petroleum basins"
+                  >
+                    All Basins ({ALL_SYNTHETIC_WELLS.length})
+                  </button>
                 </div>
+              </div>
 
-                <aside className="analogue-index">
-                  <div className="panel-heading">
-                    <h2>Offset wells</h2>
-                    <span className="mono">
-                      {comparison.items.length} IN {proximityBasis === "surface" ? "SURFACE" : "TERMINAL"} RADIUS
-                    </span>
-                  </div>
-                  {comparison.items.length ? (
-                    comparison.items.map((w) => (
+              {sidebarView === "radius" ? (
+                filteredCandidates.length ? (
+                  filteredCandidates.map((w) => (
+                    <button
+                      key={w.id}
+                      onClick={() => {
+                        setSelected(w.id);
+                        setRecord(null);
+                        setSource(null);
+                        caseSequence.current++;
+                      }}
+                      className={`analogue-row ${selected === w.id ? "selected" : ""}`}
+                    >
+                      <strong>{w.name}</strong>
+                      <span>
+                        {((proximityBasis === "terminal_bottomhole"
+                          ? w.bottomhole_horizontal_distance_m
+                          : w.surface_distance_m)! / 1000).toFixed(2)} km
+                      </span>
+                      <small>
+                        Similarity {(w.similarity_score * 100).toFixed(0)} / 100 · not risk
+                      </small>
+                      <small>
+                        {w.components.same_reviewed_formation
+                          ? "Shared reviewed formation"
+                          : "Different / unreviewed formation"}
+                      </small>
+                    </button>
+                  ))
+                ) : (
+                  <p className="index-empty">
+                    No eligible offset wells matching active filters.
+                  </p>
+                )
+              ) : (
+                /* All India Basins List */
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {ALL_SYNTHETIC_WELLS.map((sw) => {
+                    const dist = haversineKm(active.latitude, active.longitude, sw.latitude, sw.longitude);
+                    const isCurSelected = selected === sw.id;
+                    return (
                       <button
-                        key={w.id}
+                        key={sw.id}
+                        type="button"
                         onClick={() => {
-                          setSelected(w.id);
+                          setSelected(sw.id);
                           setRecord(null);
                           setSource(null);
                           caseSequence.current++;
                         }}
-                        className={`analogue-row ${selected === w.id ? "selected" : ""}`}
+                        className={`analogue-row ${isCurSelected ? "selected" : ""}`}
+                        style={{ borderLeft: isCurSelected ? "3px solid var(--teal-glow)" : "3px solid transparent" }}
                       >
-                        <strong>{w.name}</strong>
-                        <span>
-                          {((proximityBasis === "terminal_bottomhole"
-                            ? w.bottomhole_horizontal_distance_m
-                            : w.surface_distance_m)! / 1000).toFixed(2)} km
-                        </span>
-                        <small>
-                          Similarity {(w.similarity_score * 100).toFixed(0)} / 100 · not risk
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <strong>{sw.name}</strong>
+                          <span style={{ fontSize: "0.68rem", color: "var(--teal-glow)" }}>
+                            {dist < 10 ? `${dist.toFixed(1)} km` : `${dist.toFixed(0)} km`}
+                          </span>
+                        </div>
+                        <small style={{ color: "var(--text-secondary)" }}>
+                          {sw.basin} · {sw.field_name}
                         </small>
-                        <small>
-                          {w.components.same_reviewed_formation
-                            ? "Shared reviewed formation"
-                            : "Different / unreviewed formation"}
+                        <small style={{ color: "var(--ochre)" }}>
+                          {sw.primary_hazard}
                         </small>
                       </button>
-                    ))
-                  ) : (
-                    <p className="index-empty">
-                      No eligible offset wells within this radius.
-                    </p>
-                  )}
-                </aside>
-              </div>
-
-              {comparison.truncated && (
-                <p className="notice">
-                  Showing the nearest 100 eligible wellbores only. Narrow the radius.
-                </p>
+                    );
+                  })}
+                </div>
               )}
+            </aside>
+          </div>
 
-              {/* Selected Candidate Detailed Comparison */}
-              {candidate && (
-                <section className="comparison-panel">
-                  <div className="section-heading">
-                    <h2>
-                      {candidate.name} → {active.name}
-                    </h2>
-                    <span>
-                      Formation-relative comparison ·{" "}
-                      {comparison.target_interval.datum}
-                    </span>
-                  </div>
-                  <p className="footnote">{comparison.score_formula}</p>
-                  <p className="footnote">
-                    {proximityBasis === "surface"
-                      ? "Surface-selected pair"
-                      : "Terminal-position-selected pair"}{" "}
-                    · bottom-hole horizontal separation:{" "}
-                    {bottomhole?.status === "resolved"
-                      ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
-                      : "unavailable"}.{" "}
-                    {bottomhole?.status === "unresolved"
-                      ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
-                      : ""}
-                    {bottomhole?.source_scope === "owned_synthetic_demo_only"
-                      ? "Owned synthetic geometry only. "
-                      : ""}
-                    {bottomhole?.notice ??
-                      "Requires a reviewed true-north survey on both wells."}
-                  </p>
-                  <div className="score-explanation">
-                    <span>
-                      Shared formation:{" "}
-                      {candidate.components.same_reviewed_formation ? "yes" : "no"}
-                    </span>
-                    <span>
-                      MD-thickness ratio:{" "}
-                      {candidate.components.md_thickness_similarity == null
-                        ? "unknown"
-                        : candidate.components.md_thickness_similarity.toFixed(2)}
-                    </span>
-                    <span>
-                      Not included:{" "}
-                      {candidate.missing_components.map(readable).join(", ")}
-                    </span>
-                  </div>
+          {comparison.truncated && (
+            <p className="notice">
+              Showing the nearest 100 eligible wellbores only. Narrow the radius.
+            </p>
+          )}
 
-                  <h3>Approved historical incidents</h3>
-                  {candidate.mappings.length ? (
-                    <div className="mapping-table">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Incident</th>
-                            <th>Historical MD</th>
-                            <th>Mapped active MD</th>
-                            <th>Evidence</th>
+          {/* Selected Candidate Summary Banner */}
+          {candidate ? (
+            <div className="selected-analogue-banner">
+              <div className="analogue-banner-main">
+                <span className="analogue-banner-title">{candidate.name} → {active.name}</span>
+                <span className="analogue-banner-badge">SYNTHETIC DEMO</span>
+              </div>
+              <div className="analogue-banner-meta">
+                <span>{((proximityBasis === "terminal_bottomhole" ? candidate.bottomhole_horizontal_distance_m : candidate.surface_distance_m)! / 1000).toFixed(2)} km · {proximityBasis === "surface" ? "surface" : "terminal"}</span>
+                <span>Similarity {(candidate.similarity_score * 100).toFixed(0)} / 100</span>
+                <span style={{ color: candidate.components.same_reviewed_formation ? "var(--teal-glow)" : "var(--text-muted)" }}>
+                  {candidate.components.same_reviewed_formation ? "Shared formation" : "Different formation"}
+                </span>
+                {bottomhole?.status === "resolved" && (
+                  <span>BH sep: {Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m</span>
+                )}
+              </div>
+            </div>
+          ) : selectedSynthWell ? (
+            <div className="selected-analogue-banner">
+              <div className="analogue-banner-main">
+                <span className="analogue-banner-title">{selectedSynthWell.name} · {selectedSynthWell.basin}</span>
+                <span className="analogue-banner-badge">SYNTHETIC DEMO · {selectedSynthWell.state}</span>
+              </div>
+              <div className="analogue-banner-meta">
+                <span>{haversineKm(active.latitude, active.longitude, selectedSynthWell.latitude, selectedSynthWell.longitude).toFixed(1)} km separation (WGS 84)</span>
+                <span>Target: {selectedSynthWell.target_formation} ({selectedSynthWell.depth_m} m TD)</span>
+                <span style={{ color: "var(--ochre)" }}>Hazard: {selectedSynthWell.primary_hazard}</span>
+                <span>Operator: {selectedSynthWell.operator}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Subsurface Research Tabs Header */}
+          <div className="explore-tabs-header">
+            <div className="explore-tab-nav" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "incidents"}
+                className={`explore-tab-btn ${exploreTab === "incidents" ? "active" : ""}`}
+                onClick={() => setExploreTab("incidents")}
+              >
+                <span>Incidents & Correlation</span>
+                <span className="explore-tab-badge">{candidate?.mappings.length ?? 0}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "depth"}
+                className={`explore-tab-btn ${exploreTab === "depth" ? "active" : ""}`}
+                onClick={() => setExploreTab("depth")}
+              >
+                <span>Depth Register & Logs</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "pressure"}
+                className={`explore-tab-btn ${exploreTab === "pressure" ? "active" : ""}`}
+                onClick={() => setExploreTab("pressure")}
+              >
+                <span>Pressure & Mud Window</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "search"}
+                className={`explore-tab-btn ${exploreTab === "search" ? "active" : ""}`}
+                onClick={() => setExploreTab("search")}
+              >
+                <span>DDR & Claim Search</span>
+                {searchResults && (
+                  <span className="explore-tab-badge">{searchResults.items.length}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "planning"}
+                className={`explore-tab-btn ${exploreTab === "planning" ? "active" : ""}`}
+                onClick={() => {
+                  setExploreTab("planning");
+                  if (!planningPoint && active) {
+                    setPlanningPoint({
+                      latitude: Number((active.latitude + 0.035).toFixed(4)),
+                      longitude: Number((active.longitude + 0.045).toFixed(4)),
+                    });
+                  }
+                }}
+              >
+                <span>Scenario Planning</span>
+                {planningPoint && <span className="explore-tab-badge">SET</span>}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreTab === "brief"}
+                className={`explore-tab-btn ${exploreTab === "brief" ? "active" : ""}`}
+                onClick={() => setExploreTab("brief")}
+              >
+                <span>Cited Offset Brief</span>
+              </button>
+            </div>
+
+            {(exploreTab === "depth" || exploreTab === "pressure") && candidate && (
+              <div className="wellbore-toggle-group">
+                <button
+                  type="button"
+                  className={`wellbore-toggle-btn ${!inspectOffset ? "active" : ""}`}
+                  onClick={() => setInspectOffset(false)}
+                >
+                  Active: {active.name}
+                </button>
+                <button
+                  type="button"
+                  className={`wellbore-toggle-btn ${inspectOffset ? "active" : ""}`}
+                  onClick={() => setInspectOffset(true)}
+                >
+                  Offset: {candidate.name}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tab 1: Incidents & Correlation */}
+          {exploreTab === "incidents" && (
+            candidate ? (
+              <section className="comparison-panel">
+                <div className="section-heading">
+                  <h2>
+                    {candidate.name} → {active.name}
+                  </h2>
+                  <span>
+                    Formation-relative comparison · {comparison.target_interval.datum}
+                  </span>
+                </div>
+                <p className="footnote">{comparison.score_formula}</p>
+                <p className="footnote">
+                  {proximityBasis === "surface"
+                    ? "Surface-selected pair"
+                    : "Terminal-position-selected pair"}{" "}
+                  · bottom-hole horizontal separation:{" "}
+                  {bottomhole?.status === "resolved"
+                    ? `${Number(bottomhole.bottomhole_horizontal_distance_m).toFixed(0)} m`
+                    : "unavailable"}.{" "}
+                  {bottomhole?.status === "unresolved"
+                    ? `Active: ${readable(bottomhole.active_position.reason ?? "ready")}; offset: ${readable(bottomhole.offset_position.reason ?? "ready")}. `
+                    : ""}
+                  {bottomhole?.source_scope === "owned_synthetic_demo_only"
+                    ? "Owned synthetic geometry only. "
+                    : ""}
+                  {bottomhole?.notice ?? "Requires a reviewed true-north survey on both wells."}
+                </p>
+                <div className="score-explanation">
+                  <span>
+                    Shared formation:{" "}
+                    {candidate.components.same_reviewed_formation ? "yes" : "no"}
+                  </span>
+                  <span>
+                    MD-thickness ratio:{" "}
+                    {candidate.components.md_thickness_similarity == null
+                      ? "unknown"
+                      : candidate.components.md_thickness_similarity.toFixed(2)}
+                  </span>
+                  <span>
+                    Not included:{" "}
+                    {candidate.missing_components.map(readable).join(", ")}
+                  </span>
+                </div>
+
+                <h3>Approved historical incidents</h3>
+                {candidate.mappings.length ? (
+                  <div className="mapping-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Incident</th>
+                          <th>Historical MD</th>
+                          <th>Mapped active MD</th>
+                          <th>Evidence</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {candidate.mappings.map((m) => (
+                          <tr key={m.event_id}>
+                            <td>{readable(m.event_type)}</td>
+                            <td>
+                              {depth(m.source_start_md_m)}–
+                              {depth(m.source_end_md_m)}
+                            </td>
+                            <td>
+                              {m.status === "resolved" ? (
+                                `${depth(m.mapped_start_md_m)}–${depth(m.mapped_end_md_m)}`
+                              ) : (
+                                <span className="unresolved">
+                                  Unresolved: {readable(m.reason ?? "unknown")}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <button
+                                className="text-button"
+                                onClick={() => openCase(m.event_id)}
+                              >
+                                Open case file →
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {candidate.mappings.map((m) => (
-                            <tr key={m.event_id}>
-                              <td>{readable(m.event_type)}</td>
-                              <td>
-                                {depth(m.source_start_md_m)}–
-                                {depth(m.source_end_md_m)}
-                              </td>
-                              <td>
-                                {m.status === "resolved" ? (
-                                  `${depth(m.mapped_start_md_m)}–${depth(m.mapped_end_md_m)}`
-                                ) : (
-                                  <span className="unresolved">
-                                    Unresolved: {readable(m.reason ?? "unknown")}
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <button
-                                  className="text-button"
-                                  onClick={() => openCase(m.event_id)}
-                                >
-                                  Open case →
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="notice">
+                    No approved incidents to compare under current filters. This is not evidence of a risk-free well.
+                  </p>
+                )}
+                {candidate.events_truncated && (
+                  <p className="notice">
+                    Only the first 100 approved events are shown.
+                  </p>
+                )}
+                <p className="footnote">
+                  Mapped depths use a formation-top TVD offset with survey interpolation, not equal raw MD or a risk prediction. Unresolved cases must not support alerts.
+                </p>
+              </section>
+            ) : selectedSynthWell ? (
+              <section className="comparison-panel">
+                <div className="section-heading">
+                  <h2>
+                    {selectedSynthWell.name} · {selectedSynthWell.basin}
+                  </h2>
+                  <span className="mono">
+                    SYNTHETIC BASIN REFERENCE FIXTURE · {selectedSynthWell.state}
+                  </span>
+                </div>
+                <p className="footnote">
+                  Geologically calibrated reference well fixture located in {selectedSynthWell.basin} ({selectedSynthWell.field_name}).
+                  Separation from active well {active.name}: {haversineKm(active.latitude, active.longitude, selectedSynthWell.latitude, selectedSynthWell.longitude).toFixed(1)} km (Geodesic WGS 84).
+                </p>
+                <div className="score-explanation" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", margin: "14px 0" }}>
+                  <div>
+                    <span className="popup-label">Field / Basin</span>
+                    <strong style={{ display: "block", color: "var(--text-primary)" }}>{selectedSynthWell.field_name}</strong>
+                  </div>
+                  <div>
+                    <span className="popup-label">Operator</span>
+                    <strong style={{ display: "block", color: "var(--text-primary)" }}>{selectedSynthWell.operator}</strong>
+                  </div>
+                  <div>
+                    <span className="popup-label">Target Formation</span>
+                    <strong style={{ display: "block", color: "var(--teal-glow)" }}>{selectedSynthWell.target_formation}</strong>
+                  </div>
+                  <div>
+                    <span className="popup-label">Total Depth</span>
+                    <strong style={{ display: "block", color: "var(--text-primary)" }}>{selectedSynthWell.depth_m} m MD</strong>
+                  </div>
+                </div>
+
+                <div className="table-wrapper" style={{ marginTop: "16px" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Hazard Type</th>
+                        <th>Target Formation & Lithology</th>
+                        <th>Incident Summary</th>
+                        <th>Case File</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <span className="tag" style={{ textTransform: "capitalize" }}>
+                            {readable(selectedSynthWell.event_type)}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{selectedSynthWell.target_formation}</strong>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{selectedSynthWell.lithology}</div>
+                        </td>
+                        <td>
+                          <em>"{selectedSynthWell.incident_summary}"</em>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => {
+                              setRecord({
+                                id: selectedSynthWell.id,
+                                well_name: selectedSynthWell.name,
+                                event_type: selectedSynthWell.event_type,
+                                data_kind: "synthetic",
+                                start_md_m: selectedSynthWell.depth_m - 120,
+                                end_md_m: selectedSynthWell.depth_m - 80,
+                                description: selectedSynthWell.incident_summary,
+                                source_datum: "MSL",
+                                quality_issues: [],
+                                evidence: [
+                                  {
+                                    passage_id: `synth-pass-${selectedSynthWell.id}`,
+                                    document_id: `WCR-${selectedSynthWell.well_id}`,
+                                    page_number: 1,
+                                    filename: `WCR_${selectedSynthWell.well_id}.pdf`,
+                                    quote: selectedSynthWell.incident_summary,
+                                    text_version: 1,
+                                    document_version: 1,
+                                    raw_text: `FIELD INCIDENT RECORD: Well ${selectedSynthWell.name} (${selectedSynthWell.field_name}, ${selectedSynthWell.basin}). Formation: ${selectedSynthWell.target_formation}. Primary Hazard: ${selectedSynthWell.primary_hazard}. ${selectedSynthWell.incident_summary}`,
+                                  },
+                                ],
+                                mitigation: [
+                                  { id: "m-1", action_taken: `Sealed loss zone and conditioned mud system for ${selectedSynthWell.target_formation}` },
+                                ],
+                                event_outcome: [{ id: "o-1", outcome: "Wellbore stabilized; returns regained" }],
+                                npt_event: [{ id: "npt-1", duration_h: 8 }],
+                              });
+                            }}
+                          >
+                            Open Case File →
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              <p className="notice">Select an offset well from the map or list to inspect historical correlation.</p>
+            )
+          )}
+
+          {/* Tab 2: Depth Register & Logs */}
+          {exploreTab === "depth" && (
+            <div className="subsurface-logs-wrapper">
+              <DepthTrack
+                key={inspectOffset && selected ? selected : activeId}
+                token={token}
+                wellboreId={inspectOffset && selected ? selected : activeId}
+                onOpenCase={openCase}
+              />
+            </div>
+          )}
+
+          {/* Tab 3: Pressure & Mud Window */}
+          {exploreTab === "pressure" && (
+            <div className="subsurface-logs-wrapper">
+              <MudWindow
+                key={inspectOffset && selected ? selected : activeId}
+                token={token}
+                wellboreId={inspectOffset && selected ? selected : activeId}
+              />
+            </div>
+          )}
+
+          {/* Tab 4: DDR & Incident Search */}
+          {exploreTab === "search" && (
+            <section className="explore-panel" aria-label="DDR and offset claim search">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Offset Document & DDR Search</p>
+                  <h2>Search verified offset records.</h2>
+                </div>
+                <span>{active?.data_kind ?? "Indexed"}</span>
+              </div>
+              <p className="footnote">
+                Hybrid semantic and keyword retrieval against approved DDRs, WCRs, and daily logs for this basin dataset.
+              </p>
+
+              <form onSubmit={performSearch} className="planning-controls" style={{ marginBottom: "16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", width: "100%" }}>
+                  <div>
+                    <label htmlFor="exp-search-q">Search query or symptom</label>
+                    <input
+                      id="exp-search-q"
+                      type="text"
+                      placeholder="e.g. mud losses Barail, stuck pipe..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="exp-search-hazard">Hazard type</label>
+                    <select
+                      id="exp-search-hazard"
+                      value={hazardFilter}
+                      onChange={(e) => setHazardFilter(e.target.value)}
+                    >
+                      <option value="">All hazards</option>
+                      {[
+                        "mud_loss",
+                        "kick",
+                        "stuck_pipe",
+                        "overpressure",
+                        "torque_spike",
+                        "tight_hole",
+                        "fishing",
+                        "cementing_issue",
+                        "other",
+                      ].map((h) => (
+                        <option key={h} value={h}>
+                          {readable(h)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="exp-search-from">Source MD from (m)</label>
+                    <input
+                      id="exp-search-from"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g. 1800"
+                      value={minMd}
+                      onChange={(e) => setMinMd(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="exp-search-to">Source MD to (m)</label>
+                    <input
+                      id="exp-search-to"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g. 2400"
+                      value={maxMd}
+                      onChange={(e) => setMaxMd(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
+                  <button type="submit" disabled={searching}>
+                    {searching ? "Searching verified archive…" : "Search Offset Records →"}
+                  </button>
+                  {searchResults && (
+                    <button
+                      type="button"
+                      className="map-btn map-btn-subtle"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setHazardFilter("");
+                        setMinMd("");
+                        setMaxMd("");
+                        setSearchResults(null);
+                      }}
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {searchError && <p className="error" role="alert">{searchError}</p>}
+
+              {searchResults && (
+                <div aria-live="polite">
+                  <p className="footnote">
+                    {searchResults.retrieval_mode === "local_semantic"
+                      ? `Related-meaning matches · ${searchResults.semantic_model}. ${searchResults.notice}`
+                      : `Exact-term matches. ${searchResults.notice}`}
+                  </p>
+                  {searchResults.items.length ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {searchResults.items.map((r) => (
+                        <article
+                          className="search-hit"
+                          key={r.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            padding: "14px",
+                            background: "var(--glass-1)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-sm)",
+                          }}
+                        >
+                          <div style={{ flex: 1, paddingRight: "16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                              <strong style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{r.well_name}</strong>
+                              <span className="case-drawer-badge">{readable(r.event_type)}</span>
+                            </div>
+                            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: "6px 0" }}>{r.description}</p>
+                            <small style={{ color: "var(--teal-glow)", fontSize: "0.72rem", fontFamily: "var(--font-mono)" }}>
+                              {r.citations.map((c) => `${c.filename} p.${c.page_number}`).join(" · ")}
+                            </small>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-button"
+                            style={{ flexShrink: 0 }}
+                            onClick={() => openCase(r.id)}
+                          >
+                            Inspect case file →
+                          </button>
+                        </article>
+                      ))}
                     </div>
                   ) : (
                     <p className="notice">
-                      No approved incidents to compare. This is not evidence of a
-                      risk-free well.
+                      No approved DDR or incident records match these filters.
                     </p>
                   )}
-                  {candidate.events_truncated && (
-                    <p className="notice">
-                      Only the first 100 approved events are shown.
-                    </p>
+                  {searchResults.next_offset != null && (
+                    <button
+                      type="button"
+                      style={{ marginTop: "12px" }}
+                      disabled={searching}
+                      onClick={() => performSearch(undefined, searchResults.next_offset!)}
+                    >
+                      Load more results
+                    </button>
                   )}
-                  <p className="footnote">
-                    Mapped depths use a formation-top TVD offset with survey
-                    interpolation, not equal raw MD or a risk prediction. Unresolved
-                    cases must not support alerts.
-                  </p>
-                </section>
+                </div>
               )}
-            </>
+            </section>
           )}
 
-          {/* Subview 2: Subsurface Wellbore Logs */}
-          {exploreView === "subsurface" && (
-            <div className="subsurface-logs-wrapper">
-              <div className="tab-section-intro">
-                <h2>Active Wellbore Subsurface Logs</h2>
-                <p className="footnote">
-                  Correlated formation depth register and pore pressure/fracture gradient envelope for {active.name}.
-                </p>
+          {/* Tab 5: Scenario Planning Desk */}
+          {exploreTab === "planning" && active && (
+            <section className="explore-panel" aria-label="Scenario location planning">
+              <div className="planning-hint-banner">
+                <div className="planning-hint-icon">📍</div>
+                <div>
+                  <strong>Interactive Coordinate Planning Scenario</strong>
+                  <p>Click anywhere on the India/Basin map above to place or reposition your scenario planning point, or enter coordinates below.</p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", flexWrap: "wrap" }}>
+                  <label htmlFor="plan-radius-input" style={{ fontSize: "0.75rem", color: "var(--ochre)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+                    Radius: {planRadius} km
+                  </label>
+                  <input
+                    id="plan-radius-input"
+                    type="range"
+                    min="1"
+                    max="50"
+                    value={planRadius}
+                    onChange={(e) => setPlanRadius(Number(e.target.value))}
+                    style={{ width: "90px" }}
+                  />
+                  {planningPoint && (
+                    <div className="planning-coords-chip">
+                      <span className="mono">{planningPoint.latitude.toFixed(4)}°N, {planningPoint.longitude.toFixed(4)}°E</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <DepthTrack token={token} wellboreId={activeId} onOpenCase={openCase} />
-              <MudWindow token={token} wellboreId={activeId} />
+
+              <PlanningPanel
+                token={token}
+                datasetId={active.dataset_id}
+                point={planningPoint}
+                radius={planRadius}
+                formationId={intervalId || null}
+                onOpenCase={openCase}
+              />
+            </section>
+          )}
+
+          {/* Tab 6: Cited Offset Brief */}
+          {exploreTab === "brief" && (
+            <div className="brief-container" style={{ marginTop: "16px" }}>
+              <div className="brief-actions" style={{ marginBottom: "16px" }}>
+                <button type="button" onClick={prepareBrief} disabled={briefLoading}>
+                  {briefLoading ? "Preparing cited brief…" : "Prepare one-page offset brief"}
+                </button>
+                {brief && (
+                  <button type="button" onClick={() => window.print()}>
+                    Print / save as PDF
+                  </button>
+                )}
+              </div>
+              {brief ? (
+                <OffsetBrief data={brief} />
+              ) : (
+                <p className="notice">
+                  Click &ldquo;Prepare one-page offset brief&rdquo; to collate active well context, target formation, offset incidents, and cited report references into a printable shift dossier.
+                </p>
+              )}
             </div>
           )}
         </>
       )}
 
-      {/* Case File Inspection Modal/Drawer */}
+      {/* Case File Inspection Side Drawer */}
       {record && (
-        <section className="case-panel" aria-label="Historical event case file">
-          <div className="section-heading">
-            <h2>
-              {record.well_name} / {readable(record.event_type)}
-            </h2>
-            <button
-              className="text-button"
-              onClick={() => {
-                setRecord(null);
-                setSource(null);
-                caseSequence.current++;
-              }}
-            >
-              Close case
-            </button>
-          </div>
-          <p className="eyebrow">
-            {record.data_kind} · Approved historical evidence
-          </p>
-          <p>{record.description}</p>
-          <p className="footnote">
-            Source MD {depth(record.start_md_m)}–{depth(record.end_md_m)} ·
-            datum {record.source_datum ?? "not recorded on event"}
-          </p>
-          {!!record.quality_issues.length && (
-            <p className="quality-note">
-              Quality issues: {record.quality_issues.map(readable).join(", ")}
-            </p>
-          )}
-          <div className="case-facts">
-            <div>
-              <h3>Recorded response</h3>
-              {record.mitigation.length ? (
-                record.mitigation.map((m) => <p key={m.id}>{m.action_taken}</p>)
-              ) : (
-                <p>Not recorded</p>
-              )}
+        <div
+          className="case-drawer-backdrop"
+          onClick={() => {
+            setRecord(null);
+            setSource(null);
+            caseSequence.current++;
+          }}
+        >
+          <aside
+            className="case-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Historical event case file: ${record.well_name} ${readable(record.event_type)}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="case-drawer-header">
+              <div>
+                <span className="case-drawer-eyebrow">
+                  {record.data_kind} · Approved Historical Evidence
+                </span>
+                <h2 className="case-drawer-title">
+                  {record.well_name} <span className="case-drawer-badge">{readable(record.event_type)}</span>
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="case-drawer-close"
+                onClick={() => {
+                  setRecord(null);
+                  setSource(null);
+                  caseSequence.current++;
+                }}
+                aria-label="Close case drawer (Esc)"
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
             </div>
-            <div>
-              <h3>Reported outcome</h3>
-              {record.event_outcome.length ? (
-                record.event_outcome.map((o) => (
-                  <p key={o.id}>{readable(o.outcome)}</p>
-                ))
-              ) : (
-                <p>Unknown</p>
+
+            <div className="case-drawer-body">
+              <div className="case-drawer-desc">
+                <p>{record.description}</p>
+              </div>
+
+              <div className="case-drawer-meta-strip">
+                <div>
+                  <span className="meta-label">Source MD Interval</span>
+                  <span className="meta-val mono">{depth(record.start_md_m)} – {depth(record.end_md_m)}</span>
+                </div>
+                <div>
+                  <span className="meta-label">Reference Datum</span>
+                  <span className="meta-val">{record.source_datum ?? "Not specified on event"}</span>
+                </div>
+              </div>
+
+              {!!record.quality_issues.length && (
+                <div className="case-quality-alert">
+                  <strong>⚠️ Quality issues noted:</strong> {record.quality_issues.map(readable).join(", ")}
+                </div>
               )}
-            </div>
-            <div>
-              <h3>Reported NPT</h3>
-              {record.npt_event.length ? (
-                record.npt_event.map((n) => (
-                  <p key={n.id}>{n.duration_h} hours</p>
-                ))
-              ) : (
-                <p>Not recorded</p>
-              )}
-            </div>
-          </div>
-          <h3>Source citations</h3>
-          {record.evidence.map((c) => (
-            <button
-              className="citation-link"
-              key={c.passage_id}
-              onClick={() => openSource(c)}
-            >
-              {c.filename} · page {c.page_number} · document v
-              {c.document_version} / text v{c.text_version} ↗
-            </button>
-          ))}
-          {source && (
-            <div className="case-source">
-              <h3>
-                {source.filename} · page {source.page_number}
-              </h3>
-              <p className="eyebrow">
-                {readable(source.representation ?? "approved quote")}
+
+              <div className="case-facts-grid">
+                <div className="case-fact-card">
+                  <span className="fact-label">Recorded Response</span>
+                  {record.mitigation.length ? (
+                    record.mitigation.map((m) => (
+                      <p key={m.id} className="fact-text">{m.action_taken}</p>
+                    ))
+                  ) : (
+                    <p className="fact-muted">Not recorded in DDR</p>
+                  )}
+                </div>
+                <div className="case-fact-card">
+                  <span className="fact-label">Reported Outcome</span>
+                  {record.event_outcome.length ? (
+                    record.event_outcome.map((o) => (
+                      <p key={o.id} className="fact-text">{readable(o.outcome)}</p>
+                    ))
+                  ) : (
+                    <p className="fact-muted">Unknown outcome</p>
+                  )}
+                </div>
+                <div className="case-fact-card">
+                  <span className="fact-label">Reported NPT</span>
+                  {record.npt_event.length ? (
+                    record.npt_event.map((n) => (
+                      <p key={n.id} className="fact-text mono" style={{ color: "var(--ochre)", fontWeight: 700 }}>
+                        {n.duration_h} hours
+                      </p>
+                    ))
+                  ) : (
+                    <p className="fact-muted">No NPT attributed</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="case-citations-section">
+                <h3 className="section-subheading">Verified Source Citations</h3>
+                <div className="citations-list">
+                  {record.evidence.map((c) => (
+                    <button
+                      type="button"
+                      className={`citation-chip ${source?.passage_id === c.passage_id ? "active" : ""}`}
+                      key={c.passage_id}
+                      onClick={() => openSource(c)}
+                    >
+                      <span className="citation-chip-file">📄 {c.filename}</span>
+                      <span className="citation-chip-page">Page {c.page_number}</span>
+                      <span className="citation-chip-ver">Doc v{c.document_version} / Text v{c.text_version}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {source && (
+                  <div className="case-source-quote">
+                    <div className="quote-header">
+                      <span className="quote-title">
+                        {source.filename} · Page {source.page_number}
+                      </span>
+                      <span className="quote-badge">
+                        {readable(source.representation ?? "Approved quote")}
+                      </span>
+                    </div>
+                    <pre className="quote-text">
+                      {source.raw_text ?? source.quote ?? "No verbatim excerpt available"}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              <p className="case-warning-note">
+                ⓘ A recorded mitigation is a historical observation, not an operational endorsement or guarantee of cure.
               </p>
-              <pre>
-                {source.raw_text ?? source.quote ?? "No source quote available"}
-              </pre>
             </div>
-          )}
-          <p className="footnote">
-            A recorded mitigation is an observation, not a recommendation to
-            repeat it.
-          </p>
-        </section>
+          </aside>
+        </div>
       )}
     </section>
   );

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import IndiaWellMap, { MapWell } from "./IndiaMap";
 
 type Session = {
   id: string;
@@ -299,7 +300,13 @@ function AlertCard({
   );
 }
 
-export default function Operations({ token }: { token: string }) {
+export default function Operations({
+  token,
+  onNavigate,
+}: {
+  token: string;
+  onNavigate?: (view: string) => void;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selected, setSelected] = useState("");
   const [data, setData] = useState<Snapshot | null>(null);
@@ -312,6 +319,41 @@ export default function Operations({ token }: { token: string }) {
   const [clock, setClock] = useState(Date.now());
   const [speed, setSpeed] = useState("1");
   const [advisoryCap, setAdvisoryCap] = useState("3");
+  const [mapWells, setMapWells] = useState<{ active: MapWell; candidates: MapWell[] } | null>(null);
+  const [showMapLocator, setShowMapLocator] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    api<{ items: { id: string; external_id: string; name: string; latitude: number; longitude: number; data_kind: string }[] }>(token, "/wells")
+      .then((page) => {
+        if (!active) return;
+        const activeItem = page.items.find((w) => w.external_id === "SYN-A") ?? page.items[0];
+        const offsets = page.items.filter((w) => w.id !== activeItem?.id);
+        if (activeItem) {
+          setMapWells({
+            active: {
+              id: activeItem.id,
+              name: activeItem.name,
+              latitude: activeItem.latitude,
+              longitude: activeItem.longitude,
+              data_kind: activeItem.data_kind,
+              basin: "Upper Assam Basin",
+            },
+            candidates: offsets.map((w) => ({
+              id: w.id,
+              name: w.name,
+              latitude: w.latitude,
+              longitude: w.longitude,
+              data_kind: w.data_kind,
+              basin: "Upper Assam Basin",
+              surface_distance_m: 1114,
+            })),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
 
   useEffect(() => {
     const timer = setInterval(() => setClock(Date.now()), 1000);
@@ -561,6 +603,37 @@ export default function Operations({ token }: { token: string }) {
                 </span>
               </div>
             </div>
+
+            {/* Lookahead Map Locator */}
+            {mapWells && (
+              <div style={{ margin: "16px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <button
+                    type="button"
+                    className="text-button"
+                    style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--teal-glow)", cursor: "pointer", background: "none", border: "none", padding: "4px 0" }}
+                    onClick={() => setShowMapLocator((s) => !s)}
+                  >
+                    {showMapLocator ? "▼ Hide lookahead map locator" : "▶ Show lookahead map locator (Upper Assam)"}
+                  </button>
+                  <span className="mono-sm" style={{ color: "var(--text-muted)" }}>
+                    5 km lookahead horizon · SYN-B offset hazard at 2,030 m MD
+                  </span>
+                </div>
+                {showMapLocator && (
+                  <IndiaWellMap
+                    active={mapWells.active}
+                    candidates={mapWells.candidates}
+                    radius={5}
+                    proximityBasis="surface"
+                    selectedId={mapWells.candidates[0]?.id ?? ""}
+                    onSelect={() => {}}
+                    compact={true}
+                    onExploreClick={() => onNavigate?.("intelligence")}
+                  />
+                )}
+              </div>
+            )}
 
             {!data.replay_worker_ready && (
               <div className="notice">

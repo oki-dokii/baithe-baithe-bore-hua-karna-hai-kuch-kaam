@@ -75,31 +75,85 @@ export function MudWindow({ token, wellboreId }: { token: string; wellboreId: st
     return () => { live = false; };
   }, [token, wellboreId]);
   const bands = data?.bands ?? [];
-  const mdMin = bands.length ? Math.min(...bands.map((band) => band.top_md_m)) : 0;
-  const mdMax = bands.length ? Math.max(...bands.map((band) => band.base_md_m)) : 1;
-  const ppgMin = bands.length ? Math.floor(Math.min(...bands.map((band) => band.pore_pressure_ppg)) - 1) : 0;
-  const ppgMax = bands.length ? Math.ceil(Math.max(...bands.map((band) => Math.max(band.fracture_gradient_ppg, band.ecd_ppg ?? 0, band.mud_weight_ppg))) + 1) : 1;
+  const mdMin = bands.length ? Math.min(...bands.map((band) => band.top_md_m)) : 1800;
+  const mdMax = bands.length ? Math.max(...bands.map((band) => band.base_md_m)) : 2400;
+  const ppgMin = bands.length ? Math.floor(Math.min(...bands.map((band) => band.pore_pressure_ppg)) - 1) : 8;
+  const ppgMax = bands.length ? Math.ceil(Math.max(...bands.map((band) => Math.max(band.fracture_gradient_ppg, band.ecd_ppg ?? 0, band.mud_weight_ppg))) + 1) : 18;
   const x = (md: number) => 80 + ((md - mdMin) / Math.max(1, mdMax - mdMin)) * 800;
   const y = (ppg: number) => 226 - ((ppg - ppgMin) / Math.max(1, ppgMax - ppgMin)) * 180;
-  return <section className="explore-panel" aria-label="Cited pressure and mud-weight comparison">
-    <div className="section-heading"><div><p className="eyebrow">Pressure record</p><h2>Values with a paper trail.</h2></div><span>MD · metres / ppg</span></div>
-    <p className="footnote">{data?.notice ?? "Only independently approved, cited values appear here. This is not a safe operating window."}</p>
-    {error && <p role="alert" className="error">{error}</p>}
-    {!data && !error && <p role="status">Loading cited pressure records…</p>}
-    {data && !bands.length && <p className="notice">No independently reviewed pressure and mud-weight band is available for this wellbore. No envelope is inferred.</p>}
-    {!!bands.length && <><div className="mud-legend"><span className="mud-pore">Pore pressure</span><span className="mud-frac">Fracture gradient</span><span className="mud-weight">Recorded mud weight</span><span className="mud-ecd">Recorded ECD, if reviewed</span></div>
-      <div className="depth-track-scroll"><svg viewBox="0 0 920 270" role="img" aria-label="Cited historical pressure and mud-weight values by measured-depth band; not an operating recommendation">
-        {[0, .25, .5, .75, 1].map((fraction) => <g key={fraction}><line className="track-grid" x1="80" x2="880" y1={226 - fraction * 180} y2={226 - fraction * 180}/><text className="track-label" x="40" y={230 - fraction * 180}>{(ppgMin + fraction * (ppgMax - ppgMin)).toFixed(1)}</text></g>)}
-        {bands.map((band) => <g key={band.id}><rect className="mud-envelope" x={x(band.top_md_m)} y={y(band.fracture_gradient_ppg)} width={Math.max(2, x(band.base_md_m) - x(band.top_md_m))} height={y(band.pore_pressure_ppg) - y(band.fracture_gradient_ppg)}/>
-          <line className="mud-pore-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.pore_pressure_ppg)} y2={y(band.pore_pressure_ppg)}/>
-          <line className="mud-frac-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.fracture_gradient_ppg)} y2={y(band.fracture_gradient_ppg)}/>
-          <line className="mud-weight-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.mud_weight_ppg)} y2={y(band.mud_weight_ppg)}/>
-          {band.ecd_ppg != null && <line className="mud-ecd-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.ecd_ppg)} y2={y(band.ecd_ppg)}/>}
-          <title>{`${band.top_md_m}–${band.base_md_m} m MD · pore ${band.pore_pressure_ppg}, fracture ${band.fracture_gradient_ppg}, mud ${band.mud_weight_ppg}, ECD ${band.ecd_ppg ?? "unavailable"} ppg · pressure: ${band.pressure_filename} p.${band.pressure_page}; mud: ${band.mud_filename} p.${band.mud_page}`}</title>
-        </g>)}
-        <text className="track-label" x="80" y="250">{mdMin.toFixed(0)} m MD</text><text className="track-label" x="880" y="250" textAnchor="end">{mdMax.toFixed(0)} m MD</text>
-      </svg></div><p className="footnote">{data?.source_kind.toUpperCase()} source · {bands.length} reviewed band{bands.length === 1 ? "" : "s"}. Hover each band for exact values and source pages.{data?.truncated ? " First 200 bands only." : ""}</p></>}
-  </section>;
+  return (
+    <section className="explore-panel" aria-label="Cited pressure and mud-weight comparison">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Pressure record & mud window</p>
+          <h2>Values with a paper trail.</h2>
+        </div>
+        <span>MD · metres / ppg</span>
+      </div>
+      <p className="footnote">
+        {data?.notice ?? "Only independently approved, cited values appear here. This is not a safe operating window."}
+      </p>
+      {error && <p role="alert" className="error">{error}</p>}
+      {!data && !error && <p role="status">Loading cited pressure records…</p>}
+      {data && (
+        <>
+          <div className="mud-legend">
+            <span className="mud-pore">Pore pressure</span>
+            <span className="mud-frac">Fracture gradient</span>
+            <span className="mud-weight">Recorded mud weight</span>
+            <span className="mud-ecd">Recorded ECD, if reviewed</span>
+          </div>
+          <div className="depth-track-scroll">
+            <svg viewBox="0 0 920 270" role="img" aria-label="Cited historical pressure and mud-weight values by measured-depth band; not an operating recommendation">
+              {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
+                <g key={fraction}>
+                  <line className="track-grid" x1="80" x2="880" y1={226 - fraction * 180} y2={226 - fraction * 180} />
+                  <text className="track-label" x="40" y={230 - fraction * 180}>
+                    {(ppgMin + fraction * (ppgMax - ppgMin)).toFixed(1)}
+                  </text>
+                </g>
+              ))}
+              {bands.length > 0 ? (
+                bands.map((band) => (
+                  <g key={band.id}>
+                    <rect
+                      className="mud-envelope"
+                      x={x(band.top_md_m)}
+                      y={y(band.fracture_gradient_ppg)}
+                      width={Math.max(2, x(band.base_md_m) - x(band.top_md_m))}
+                      height={y(band.pore_pressure_ppg) - y(band.fracture_gradient_ppg)}
+                    />
+                    <line className="mud-pore-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.pore_pressure_ppg)} y2={y(band.pore_pressure_ppg)} />
+                    <line className="mud-frac-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.fracture_gradient_ppg)} y2={y(band.fracture_gradient_ppg)} />
+                    <line className="mud-weight-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.mud_weight_ppg)} y2={y(band.mud_weight_ppg)} />
+                    {band.ecd_ppg != null && <line className="mud-ecd-line" x1={x(band.top_md_m)} x2={x(band.base_md_m)} y1={y(band.ecd_ppg)} y2={y(band.ecd_ppg)} />}
+                    <title>{`${band.top_md_m}–${band.base_md_m} m MD · pore ${band.pore_pressure_ppg}, fracture ${band.fracture_gradient_ppg}, mud ${band.mud_weight_ppg}, ECD ${band.ecd_ppg ?? "unavailable"} ppg · pressure: ${band.pressure_filename} p.${band.pressure_page}; mud: ${band.mud_filename} p.${band.mud_page}`}</title>
+                  </g>
+                ))
+              ) : (
+                <g>
+                  <rect x="180" y="80" width="560" height="90" rx="8" fill="rgba(15, 23, 42, 0.85)" stroke="rgba(120, 140, 160, 0.3)" strokeDasharray="4 4" />
+                  <text x="460" y="118" textAnchor="middle" fill="#94a3b8" fontSize="13" fontWeight="600" fontFamily="var(--font-mono)">
+                    NO REVIEWED PRESSURE BANDS FOR THIS WELLBORE
+                  </text>
+                  <text x="460" y="142" textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="var(--font-sans)">
+                    No pore pressure or fracture gradient envelope is inferred without independently reviewed WCR/DDR records.
+                  </text>
+                </g>
+              )}
+              <text className="track-label" x="80" y="255">{mdMin.toFixed(0)} m MD</text>
+              <text className="track-label" x="880" y="255" textAnchor="end">{mdMax.toFixed(0)} m MD</text>
+            </svg>
+          </div>
+          <p className="footnote">
+            {data.source_kind.toUpperCase()} source · {bands.length} reviewed band{bands.length === 1 ? "" : "s"}.
+            {bands.length > 0 ? " Hover each band for exact values and source pages." : " Envelope is intentionally not extrapolated from unverified data."}
+            {data.truncated ? " First 200 bands only." : ""}
+          </p>
+        </>
+      )}
+    </section>
+  );
 }
 
 export function DepthTrack({ token, wellboreId, onOpenCase }: {
@@ -115,36 +169,154 @@ export function DepthTrack({ token, wellboreId, onOpenCase }: {
       .catch((e) => live && setError(e.message));
     return () => { live = false; };
   }, [token, wellboreId]);
-  const depths = data ? [
+
+  const rawDepths = data ? [
     ...data.intervals.flatMap((item) => [item.top_md_m, item.base_md_m ?? item.top_md_m]),
     ...data.events.flatMap((item) => [item.start_md_m ?? 0, item.end_md_m ?? item.start_md_m ?? 0]),
     ...data.parameters.map((item) => item.md_m),
   ].filter((value) => value > 0) : [];
-  const min = depths.length ? Math.floor(Math.min(...depths) / 50) * 50 : 0;
-  const max = depths.length ? Math.ceil(Math.max(...depths) / 50) * 50 + 1 : 1;
-  const x = (md: number) => 122 + ((md - min) / (max - min)) * 768;
+
+  const rawMin = rawDepths.length ? Math.min(...rawDepths) : 1800;
+  const rawMax = rawDepths.length ? Math.max(...rawDepths) : 2400;
+  const pad = Math.max(80, (rawMax - rawMin) * 0.15);
+  const min = Math.max(0, Math.floor((rawMin - pad) / 50) * 50);
+  const max = Math.ceil((rawMax + pad) / 50) * 50 + 1;
+  const x = (md: number) => 130 + ((md - min) / Math.max(1, max - min)) * 750;
+
   const paramLine = (field: "rop_m_per_h" | "torque_kn_m", top: number) => {
     if (!data?.parameters.length) return "";
     const values = data.parameters.map((row) => row[field]);
     const highest = Math.max(...values, 1);
     return data.parameters.map((row, index) =>
-      `${index ? "L" : "M"}${x(row.md_m).toFixed(1)},${(top + 42 - row[field] / highest * 34).toFixed(1)}`
+      `${index ? "L" : "M"}${x(row.md_m).toFixed(1)},${(top + 42 - (row[field] / highest) * 34).toFixed(1)}`
     ).join(" ");
   };
+
   return (
     <section className="explore-panel" aria-label="Synchronized measured-depth track">
-      <div className="section-heading"><div><p className="eyebrow">Depth register</p><h2>One ruler, several stories.</h2></div><span>MD · metres</span></div>
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Depth register & multi-lane log</p>
+          <h2>One ruler, several stories.</h2>
+        </div>
+        <span>MD · metres</span>
+      </div>
       {error && <p role="alert" className="error">{error}</p>}
       {!data && !error && <p role="status">Loading depth evidence…</p>}
-      {data && !depths.length && <p className="notice">No reviewed depth intervals or qualified parameter samples are available for this wellbore.</p>}
-      {data && !!depths.length && <div className="depth-track-scroll"><svg viewBox="0 0 920 280" role="img" aria-label="Formation, incident, rate of penetration and torque lanes aligned by measured depth">
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => <g key={fraction}><line x1={122 + fraction * 768} x2={122 + fraction * 768} y1="29" y2="258" className="track-grid"/><text x={122 + fraction * 768} y="17" textAnchor="middle" className="track-label">{(min + fraction * (max - min)).toFixed(0)}</text></g>)}
-        {[["Formation", 45], ["Incident", 100], ["ROP", 155], ["Torque", 210]].map(([name, y]) => <g key={name}><text x="8" y={Number(y) + 19} className="track-lane">{name}</text><line x1="122" x2="890" y1={Number(y) + 48} y2={Number(y) + 48} className="track-grid"/></g>)}
-        {data.intervals.filter((item) => item.base_md_m != null).map((item) => <g key={item.id}><rect x={x(item.top_md_m)} y="49" width={Math.max(2, x(item.base_md_m!) - x(item.top_md_m))} height="34" className="track-formation"/><title>{item.name} · {item.top_md_m}–{item.base_md_m} m MD · {item.datum}</title></g>)}
-        {data.events.filter((item) => item.start_md_m != null).map((item) => <g key={item.id} role="button" tabIndex={0} onClick={() => onOpenCase(item.id)} onKeyDown={(e) => e.key === "Enter" && onOpenCase(item.id)}><circle cx={x(item.start_md_m!)} cy="117" r="8" className="track-event"/><title>{human(item.event_type)} · {item.start_md_m} m MD · open case</title></g>)}
-        {!!data.parameters.length && <><path d={paramLine("rop_m_per_h", 155)} className="track-rop"/><path d={paramLine("torque_kn_m", 210)} className="track-torque"/></>}
-      </svg></div>}
-      {data && <p className="footnote">{data.source_kind.toUpperCase()} source · formations and incidents are reviewed; parameters are qualified historical samples. {data.parameter_note} Missing lanes: {data.missing_lanes.map(human).join(", ")}. Hover marks for details; select an incident to open its cited case.</p>}
+      {data && !rawDepths.length && (
+        <p className="notice">No reviewed depth intervals or qualified parameter samples are available for this wellbore.</p>
+      )}
+      {data && !!rawDepths.length && (
+        <div className="depth-track-scroll">
+          <svg viewBox="0 0 920 290" role="img" aria-label="Formation, incident, rate of penetration and torque lanes aligned by measured depth">
+            {/* Vertical grid lines & depth labels */}
+            {[0, 0.2, 0.4, 0.6, 0.8, 1].map((fraction) => {
+              const xPos = 130 + fraction * 750;
+              const mdVal = min + fraction * (max - min);
+              return (
+                <g key={fraction}>
+                  <line x1={xPos} x2={xPos} y1="28" y2="265" className="track-grid" />
+                  <text x={xPos} y="18" textAnchor="middle" className="track-label">
+                    {mdVal.toFixed(0)}m
+                  </text>
+                  <text x={xPos} y="280" textAnchor="middle" className="track-label">
+                    {mdVal.toFixed(0)}m
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Lane headers & horizontal dividers */}
+            {[
+              ["Formation", 45],
+              ["Incident", 102],
+              ["ROP (m/h)", 158],
+              ["Torque (kN·m)", 214],
+            ].map(([name, yPos]) => (
+              <g key={name}>
+                <rect x="6" y={Number(yPos)} width="114" height="42" rx="4" fill="rgba(17, 24, 39, 0.6)" />
+                <text x="14" y={Number(yPos) + 26} className="track-lane">
+                  {name}
+                </text>
+                <line x1="126" x2="885" y1={Number(yPos) + 45} y2={Number(yPos) + 45} className="track-grid" />
+              </g>
+            ))}
+
+            {/* Formation intervals */}
+            {data.intervals.filter((item) => item.base_md_m != null).map((item) => {
+              const startX = x(item.top_md_m);
+              const endX = x(item.base_md_m!);
+              const width = Math.max(6, endX - startX);
+              return (
+                <g key={item.id}>
+                  {/* Vertical boundary lines down through all lanes */}
+                  <line x1={startX} x2={startX} y1="45" y2="260" stroke="#38b2ac" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+                  <line x1={endX} x2={endX} y1="45" y2="260" stroke="#38b2ac" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+                  {/* Formation block */}
+                  <rect x={startX} y="49" width={width} height="36" className="track-formation" rx="4" />
+                  <text
+                    x={startX + width / 2}
+                    y="72"
+                    textAnchor="middle"
+                    fill="#e6fffa"
+                    fontFamily="var(--font-mono)"
+                    fontSize="12"
+                    fontWeight="700"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {item.name} · {item.top_md_m}–{item.base_md_m}m MD
+                  </text>
+                  <title>{item.name} · {item.top_md_m}–{item.base_md_m} m MD · Datum: {item.datum}</title>
+                </g>
+              );
+            })}
+
+            {/* Incident markers */}
+            {data.events.length === 0 && (
+              <text x="500" y="128" textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="var(--font-mono)">
+                No approved historical incidents recorded in this interval
+              </text>
+            )}
+            {data.events.filter((item) => item.start_md_m != null).map((item) => (
+              <g
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenCase(item.id)}
+                onKeyDown={(e) => e.key === "Enter" && onOpenCase(item.id)}
+                style={{ cursor: "pointer" }}
+              >
+                <circle cx={x(item.start_md_m!)} cy="123" r="10" className="track-event" />
+                <text x={x(item.start_md_m!)} y="127" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="bold">!</text>
+                <title>{human(item.event_type)} · {item.start_md_m} m MD · Click to inspect case</title>
+              </g>
+            ))}
+
+            {/* Parameters (ROP & Torque curves) */}
+            {data.parameters.length > 0 ? (
+              <>
+                <path d={paramLine("rop_m_per_h", 158)} className="track-rop" />
+                <path d={paramLine("torque_kn_m", 214)} className="track-torque" />
+              </>
+            ) : (
+              <>
+                <text x="500" y="184" textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="var(--font-mono)">
+                  No approved ROP parameter channel for this fixture
+                </text>
+                <text x="500" y="240" textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="var(--font-mono)">
+                  No approved Torque parameter channel for this fixture
+                </text>
+              </>
+            )}
+          </svg>
+        </div>
+      )}
+      {data && (
+        <p className="footnote">
+          {data.source_kind.toUpperCase()} source · formations and incidents are reviewed; parameters are qualified historical samples.{" "}
+          {data.parameter_note} Missing lanes: {data.missing_lanes.map(human).join(", ")}. Hover marks for details; click an incident icon to open its cited case.
+        </p>
+      )}
     </section>
   );
 }
