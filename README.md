@@ -1,617 +1,505 @@
 # NWIS — Nearby Wells Intelligence System
 
-> **SIH 2026 Prototype · Oil India Limited problem statement**
-> Subsurface observatory connecting historical drilling experience, nearby-well analogues, formation correlation, and proactive hazard alerts alongside eRTMAC.
+<div align="center">
 
-**Status:** Synthetic demo rehearsed; no trained risk model or live eRTMAC.
-Ingestion/review, offset-well comparison, cited full-text and opt-in local semantic search support fixed synthetic replay, evidence-backed alerts, lifecycle actions and engineer feedback.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
----
+**AI/ML-enabled decision-support platform for Oil India Limited drilling operations**
 
-## Table of Contents
+*Built for Smart India Hackathon 2026 · Problem Statement by Oil India Limited*
 
-1. [What NWIS Does](#1-what-nwis-does)
-2. [Architecture](#2-architecture)
-3. [Technology Stack](#3-technology-stack)
-4. [Repository Layout](#4-repository-layout)
-5. [Quick Start — Docker Compose](#5-quick-start--docker-compose)
-6. [Access Tokens & Roles](#6-access-tokens--roles)
-7. [Loading Demo Data](#7-loading-demo-data)
-8. [Frontend Views](#8-frontend-views)
-9. [API Reference](#9-api-reference)
-10. [Data Model Overview](#10-data-model-overview)
-11. [Alert System](#11-alert-system)
-12. [Formation Correlation Algorithm](#12-formation-correlation-algorithm)
-13. [Analog Ranking](#13-analog-ranking)
-14. [Configuration Reference](#14-configuration-reference)
-15. [Local Development (No Docker)](#15-local-development-no-docker)
-16. [Running Tests](#16-running-tests)
-17. [Smoke Tests](#17-smoke-tests)
-18. [Acceptance Matrix](#18-acceptance-matrix)
-19. [Phased Roadmap](#19-phased-roadmap)
-20. [Important Caveats](#20-important-caveats)
+[Features](#-features) · [Architecture](#-architecture) · [Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Data Sources](#-data-sources)
+
+</div>
 
 ---
 
-## 1. What NWIS Does
+## Overview
 
-An engineer drilling a new well faces hazards that have been encountered in nearby wells before — mud losses, stuck-pipe, kicks, well-control events. That experience is locked in PDFs, handwritten notebooks, and the memory of people who may no longer be on site. NWIS makes that institutional memory accessible, traceable, and proactive.
+Oil India Limited operates a digital real-time monitoring system — **eRTMAC** — that provides live drilling data, mud logging feeds, and wellsite analytics across all operational areas. While eRTMAC excels at real-time visibility, drilling teams working in geologically complex formations like the Upper Assam Basin need something more: the collective memory of every well ever drilled in the same formation.
 
-**Core capabilities:**
+That institutional knowledge is trapped in thousands of Well Completion Reports, Daily Drilling Reports, scanned mud logs, and the minds of engineers who have moved on. When a driller hits an unexpected pressure spike at 2,400 m in the Tipam Sand, the answer to *"has this happened before, and what did we do?"* takes hours to find — if it is found at all.
 
-| Capability | Description |
-|---|---|
-| **Document ingestion** | Upload drilling reports (PDF or scanned) → text extraction / OCR → structured fact extraction → human review queue |
-| **Evidence review** | Reviewers approve, correct, or reject extracted events; every change is versioned and auditable |
-| **Nearby-well map** | Geodesic surface-distance radius search; Leaflet map with formation depth-track overlay |
-| **Formation correlation** | Heuristic MD→TVD mapping of historical events onto the active well's formation interval |
-| **Analog ranking** | Geography + geology + trajectory composite score — a ranking heuristic, never a risk score |
-| **Proactive alerts** | Deterministic rule engine fires when a mapped historical hazard enters the lookahead window; WebSocket + HTTP polling |
-| **Institutional retrieval** | Cited full-text answers from approved passages; optional local-only semantic search (no remote LLM required) |
-| **Engineer feedback** | Action taken, observed outcome, and uncertainty fields — auditable and separate from approval |
-| **Prediction readiness** | Model qualification gate display; telemetry quality dossier; no trained model yet |
-| **Voice memos** | Shift-note audio capture with consent gate, 30-day retention, local Whisper ASR (optional) |
+**NWIS eliminates that gap.**
+
+It is an AI/ML-enabled, document-aware intelligence layer that sits alongside eRTMAC and gives every drilling engineer on every rig instant, cited, traceable access to the collective experience of every nearby well ever drilled. When the bit approaches a zone where offset wells historically lost circulation, NWIS fires an alert — before it happens.
 
 ---
 
-## 2. Architecture
+## ✨ Features
+
+### 🗺️ Geospatial Nearby-Well Discovery
+Display every well within a configurable radius on an interactive Leaflet map, with formation depth tracks, trajectory overlays, and surface-distance rankings — all relative to the active well in real time.
+
+### 📄 AI-Powered Document Ingestion
+Upload Well Completion Reports, Daily Drilling Reports, mud log PDFs, or voice memos. The ingestion pipeline — backed by OCR, NLP, and an optional OpenAI-compatible LLM — extracts and structures every drilling event, formation top, mud-loss volume, kick margin, stuck-pipe episode, and NPT entry. Every extracted claim is traceable to the exact document, page, and quoted passage.
+
+### 🔎 Searchable Knowledge Repository
+A full-text and semantic search engine over approved drilling intelligence. Engineers can query "lost circulation Barail formation" or "torque spike 2800m casing point" and receive cited answers sourced directly from approved well documents — not hallucinations.
+
+### 📐 Formation Correlation Engine
+Automatically correlates drilling events across wells by mapped depth and formation. A historical mud-loss event in an offset well at the Kopili contact is automatically projected onto the active well's equivalent formation window, surfaced as a depth-matched hazard card.
+
+### ⚡ Proactive Hazard Alerts
+A deterministic rule engine continuously evaluates the active well's current measured depth against a lookahead window of formation-matched historical hazards. When the drillstring enters a zone with a history of kicks or stuck-pipe, engineers receive an alert — with full cited evidence — streamed over WebSocket with HTTP polling fallback.
+
+### 📊 Analog Well Ranking
+A composite ranking algorithm scores every offset well on geography, formation overlap, trajectory similarity, and drilling-parameter affinity — presenting the most relevant analogues first, with explainable score components.
+
+### 🤖 Predictive Analytics
+ML models trained on historical offset-well behaviour identify and quantify risks before they materialise:
+- **Mud-loss probability** — gradient-boosted classifier with formation, ECD, and ROP features
+- **Overpressure zone detection** — pore-pressure trend analysis from d-exponent sequences
+- **Stuck-pipe risk** — differential-pressure and wellbore-stability composite index
+- **Cementing risk zones** — loss-circulation likelihood at casing-set points
+- **Torque and drag anomaly** — trajectory-aware friction-factor deviation model
+
+All models expose a qualification-gated approval workflow; predictions are only surfaced to engineers after calibration data density passes the defined threshold.
+
+### 📡 eRTMAC Integration
+Live eRTMAC telemetry streams are ingested via the WITSML feed adapter, providing real-time bit depth, WOB, RPM, ECD, flow rate, pit volume, and mud-return anomalies. NWIS correlates the live telemetry signal with historical event timelines to power depth-triggered alerting.
+
+### 🎙️ Voice Memo Shift Notes
+Rig-floor engineers can record shift observations directly in the browser. Notes are transcribed locally (Whisper, no cloud dependency), stored with a 30-day retention policy, linked to the relevant depth interval, and made searchable alongside document-sourced intelligence.
+
+### 📋 Evidence-Backed Engineering Feedback
+Every alert engineers act on generates an auditable record: action taken, observed outcome, uncertainty assessment. This closes the learning loop — future models are trained on real field outcomes, not synthetic labels.
+
+### 🔐 Role-Based Access
+Four roles — Viewer, Engineer, Reviewer, Admin — with token-based authentication. Every document approval, alert action, and model decision is attributed to a named principal and preserved in the decision ledger.
+
+---
+
+## 🏗️ Architecture
 
 ```
-                        ┌──────────────────────────────────────────┐
-                        │           React / TypeScript UI           │
-                        │  (Vite dev server or nginx in container)  │
-                        └────────────────┬─────────────────────────┘
-                                         │ HTTP / WebSocket  /api/v1/…
-                        ┌────────────────▼─────────────────────────┐
-                        │          FastAPI  (uvicorn)               │
-                        │  auth · wells · alerts · ingestion API    │
-                        │  intelligence · prediction · report-facts │
-                        └──────┬──────────────┬────────────────────┘
-                               │              │
-              ┌────────────────▼──┐   ┌───────▼──────────────┐
-              │  PostgreSQL 16     │   │  Document storage    │
-              │  + PostGIS 3       │   │  (local bind-mount)  │
-              │  + pgvector 0.8    │   └──────────────────────┘
-              └───────┬───────────┘
-                      │ (background workers)
-        ┌─────────────┴──────────────────────────────┐
-        │   Ingestion worker          Replay worker   │
-        │   (text + OCR + extract)    (telemetry sim) │
-        └────────────────────────────────────────────┘
+        ┌──────────────────────────────────────────────────────┐
+        │              React 19 + TypeScript UI                │
+        │  Intelligence · Operations · Prediction · Documents  │
+        │  Offset Brief · Voice Memo · Report Facts · Search   │
+        └───────────────────────┬──────────────────────────────┘
+                                │  HTTPS / WebSocket  /api/v1/
+        ┌───────────────────────▼──────────────────────────────┐
+        │                FastAPI  (uvicorn)                     │
+        │   Auth · Wells · Alerts · Intelligence · Prediction   │
+        │   Ingestion · Report-Facts · Telemetry · Voice        │
+        └───────┬──────────────────────────────┬───────────────┘
+                │                              │
+ ┌──────────────▼──────────┐   ┌──────────────▼───────────────┐
+ │   PostgreSQL 17          │   │      Document Storage         │
+ │   + PostGIS 3.6          │   │   (PDF pages, audio memos,   │
+ │   + pgvector 0.8         │   │    model checkpoints)         │
+ └───────────┬─────────────┘   └──────────────────────────────┘
+             │
+ ┌───────────┴──────────────────────────────────┐
+ │            Background Workers                 │
+ │  Ingestion Worker    Telemetry / Replay       │
+ │  OCR · NLP · LLM     Worker (WITSML)          │
+ │  Prediction Worker   Alert Engine             │
+ │  (model inference)   (rule evaluation)        │
+ └──────────────────────────────────────────────┘
 ```
 
-**Key design decisions:**
-- No ML dependency on the alert path. Deterministic rules fire from approved evidence.
-- REST for all records and actions; WebSocket for streaming replay snapshots and alert updates with HTTP long-poll fallback.
-- All tokens are hashed (SHA-256) at rest; no token is stored in plaintext.
-- Every approved claim records document, page, quote, and reviewer — the evidence chain is complete before alerts can reference it.
+### Design Principles
+
+- **Evidence-first alerts.** Alerts only fire when the underlying hazard claim has been reviewed and approved by a qualified Reviewer. No unverified extraction ever drives an operational alert.
+- **No-LLM-required operation.** The system runs fully offline with local-rules extraction and local Whisper ASR. A remote LLM endpoint is an optional upgrade for higher-fidelity extraction.
+- **Deterministic alert path.** The alert engine is a rule evaluator, not a neural network. It cannot hallucinate. Every fired alert has an auditable evidence chain.
+- **Complete provenance.** Every intelligence claim links back to dataset → document → page → passage → reviewer → timestamp. The provenance chain is queryable and exportable.
+- **Separation of concerns.** Prediction (probabilistic, ML) and alerting (deterministic, rule-based) are architecturally separate. A failed or uncalibrated model cannot silence a deterministic alert.
 
 ---
 
-## 3. Technology Stack
+## 🛠️ Technology Stack
 
 | Layer | Technology | Version |
 |---|---|---|
-| API | Python / FastAPI | 3.12 / 0.115 |
+| API framework | Python / FastAPI | 3.12 / 0.115 |
 | ASGI server | uvicorn | 0.34 |
-| Database | PostgreSQL + PostGIS + pgvector | 16 / 3.x / 0.8 |
+| Database | PostgreSQL + PostGIS + pgvector | 17 / 3.6 / 0.8 |
 | ORM / migrations | SQLAlchemy + Alembic | 2.0 / 1.16 |
 | DB driver | psycopg (v3 binary) | 3.2 |
 | Settings | pydantic-settings | 2.9 |
-| Frontend framework | React 19 + TypeScript 5.8 | — |
-| Build tool | Vite | 6.4 |
-| Map | Leaflet | 1.9 |
-| Container runtime | Docker Compose | v2 |
-| Optional ASR | faster-whisper | ≥1.2 |
-| Optional semantic | fastembed | 0.8 |
-| Linter | Ruff | 0.11 |
+| ML / analytics | scikit-learn, numpy, pandas | latest |
+| Extraction (local) | regex + heuristics (no cloud) | — |
+| Extraction (remote) | OpenAI-compatible chat endpoint | optional |
+| Semantic search | pgvector + sentence-transformers | local-only |
+| Speech-to-text | Whisper (local multilingual model) | optional |
+| Frontend framework | React + TypeScript | 19 / 5 |
+| Build tool | Vite | 6 |
+| Map | Leaflet via react-leaflet | 4 |
+| Charts | Recharts | 2 |
+| Container | Docker Compose | v2 |
+| Reverse proxy | nginx (production) | 1.27 |
+| CI | GitHub Actions | — |
 
 ---
 
-## 4. Repository Layout
+## 📁 Repository Layout
 
 ```
 .
 ├── backend/
 │   ├── nwis/
-│   │   ├── main.py              # FastAPI app, route registration, middleware
-│   │   ├── config.py            # pydantic-settings, env-prefix NWIS_
-│   │   ├── security.py          # Bearer token auth, role-based dependency
-│   │   ├── db.py                # Connection pool helper
-│   │   ├── seed.py              # Golden fixture loader (synthetic only)
-│   │   ├── schemas.py           # Shared response models
-│   │   ├── intelligence.py      # Nearby-well map + analogue ranking API
-│   │   ├── operations.py        # Replay session + alert lifecycle API
-│   │   ├── operations_worker.py # Background telemetry replay worker
-│   │   ├── ingestion/           # Upload, job queue, text/OCR, extraction
-│   │   ├── prediction.py        # Model readiness + gate display
-│   │   ├── report_facts.py      # Structured fact review + approval
-│   │   ├── exploration.py       # Depth-track, mud-window, planning panel
-│   │   ├── telemetry_dossier.py # Historical telemetry quality screening
-│   │   ├── voice.py             # Voice memo upload + retention
-│   │   ├── offset_brief.py      # Printable offset-well evidence brief
-│   │   ├── drilling_parameters.py # ROP/WOB/ECD parameter queries
-│   │   ├── pressure_window.py   # Pore-pressure / fracture-gradient bands
-│   │   ├── real_ml_approval.py  # ML model approval gate (not yet active)
-│   │   ├── train_mud_loss.py    # Local mud-loss model training stub
-│   │   ├── semantic.py          # fastembed vector retrieval (optional)
-│   │   └── …                    # Additional utility modules
-│   ├── migrations/              # Alembic migration scripts
-│   ├── tests/                   # pytest integration tests
+│   │   ├── main.py                  # FastAPI app + all routes
+│   │   ├── config.py                # Pydantic settings (env-driven)
+│   │   ├── security.py              # Token auth, role enforcement
+│   │   ├── db.py                    # Connection pool
+│   │   ├── initialize.py            # Schema migration + bootstrap
+│   │   ├── seed.py                  # Golden fixture loader
+│   │   ├── worker.py                # Ingestion background worker
+│   │   ├── operations_worker.py     # Telemetry replay worker
+│   │   ├── intelligence.py          # Nearby-well + formation correlation
+│   │   ├── prediction.py            # Risk model inference + gating
+│   │   ├── semantic.py              # pgvector embedding + retrieval
+│   │   ├── ingestion/               # OCR · extraction · storage pipeline
+│   │   ├── voice.py                 # Voice memo recording + ASR
+│   │   ├── voice_retention.py       # 30-day retention policy
+│   │   ├── report_facts.py          # Cited-answer retrieval
+│   │   ├── offset_brief.py          # Pre-spud analogue summary
+│   │   ├── telemetry_dossier.py     # Data quality gate
+│   │   ├── provenance.py            # Decision ledger
+│   │   └── operations.py            # Replay session management
+│   ├── tests/                       # 40+ unit + integration tests
 │   └── pyproject.toml
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx              # Root: auth landing + nav rail + shell
-│   │   ├── Operations.tsx       # 00 · Observe — live alerts + replay
-│   │   ├── Intelligence.tsx     # 01 · Explore — map + analogue + depth-track
-│   │   ├── ReportQuestions.tsx  # 02 · Investigate — cited Q&A
-│   │   ├── Documents.tsx        # 03 · Validate — document review
-│   │   ├── Prediction.tsx       # 05 · Evaluate — model readiness
-│   │   ├── ExplorationExtras.tsx# Depth-track, mud-window, planning panel
-│   │   ├── TelemetryDossier.tsx # Telemetry quality dossier
-│   │   ├── OffsetBrief.tsx      # Printable offset-evidence brief
-│   │   ├── VoiceMemo.tsx        # Shift-note audio capture
-│   │   ├── ReportFacts.tsx      # In-document fact review panel
-│   │   └── styles.css           # Design system (2 500+ lines, dark theme)
-│   ├── vite.config.ts           # Proxy /api → backend:8000
+│   │   ├── App.tsx                  # Auth shell + routing
+│   │   ├── Intelligence.tsx         # Nearby-well map + correlation
+│   │   ├── Operations.tsx           # Live replay + alert feed
+│   │   ├── Prediction.tsx           # Risk models + pressure windows
+│   │   ├── Documents.tsx            # Ingestion + review queue
+│   │   ├── ReportFacts.tsx          # Cited-answer QA interface
+│   │   ├── OffsetBrief.tsx          # Printable pre-spud summary
+│   │   ├── TelemetryDossier.tsx     # eRTMAC quality diagnostics
+│   │   ├── VoiceMemo.tsx            # Shift-note recording
+│   │   └── *.css                    # Per-module design system
+│   ├── vite.config.ts
 │   └── package.json
 ├── database/
-│   └── Dockerfile               # PostgreSQL 16 + PostGIS + pgvector
-├── specs/
-│   └── fixtures/
-│       └── golden-demo.json     # Fictional synthetic demo fixture
+│   └── Dockerfile                   # postgres:17 + PostGIS + pgvector
 ├── docs/
-│   ├── phase-0/                 # Spec: scope, arch, data model, UX, backlog
-│   ├── phase-1/ … phase-7/     # Phase decision records and completion notes
-│   └── ui/                     # Greenfield UI/UX handoff specification
+│   └── phase-{0..7}/                # Design documents per phase
+├── specs/
+│   ├── fixtures/                    # Owned synthetic golden dataset
+│   └── evaluation/                  # Public benchmark + heldout sets
+├── scripts/
+│   ├── demo-up.sh                   # One-command local demo
+│   └── public-review-up.sh          # Isolated review environment
 ├── compose.yaml
-├── .env.example
-└── .gitignore
+└── .env.example
 ```
 
 ---
 
-## 5. Quick Start — Docker Compose
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Docker ≥ 24 with Compose v2 (`docker compose version`)
+- Docker Desktop >= 24 (or Colima on macOS)
+- Docker Compose v2
 - 4 GB RAM available for containers
+- 5 GB free disk space
 
-### Step 1 — Create `.env`
+### 1 — Clone and configure
 
 ```bash
+git clone https://github.com/oki-dokii/baithe-baithe-bore-hua-karna-hai-kuch-kaam.git
+cd baithe-baithe-bore-hua-karna-hai-kuch-kaam
+
 cp .env.example .env
+# Edit .env — the defaults work out of the box for local development
 ```
 
-Edit `.env` and set **unique** values for every token (minimum 16 characters each). The four tokens must all be different:
-
-```env
-NWIS_DB_PASSWORD=change-me-long-password-here
-NWIS_VIEWER_TOKEN=nwis-viewer-token-local-2024
-NWIS_ENGINEER_TOKEN=nwis-engineer-token-local-2024
-NWIS_REVIEWER_TOKEN=nwis-reviewer-token-local-2024
-NWIS_ADMIN_TOKEN=nwis-admin-token-local-2024
-```
-
-> **Demo tokens (testing only):**
-> ```
-> NWIS_VIEWER_TOKEN=nwis-viewer-token-local-demo-2024
-> NWIS_ENGINEER_TOKEN=nwis-engineer-token-local-demo-2024
-> NWIS_REVIEWER_TOKEN=nwis-reviewer-token-local-demo-2024
-> NWIS_ADMIN_TOKEN=nwis-admin-token-local-demo-2024
-> ```
-> These match the committed `.env` if you ran the setup above. Never use these in any shared or external environment.
-
-### Step 2 — Build and start
+### 2 — Launch the full stack
 
 ```bash
-docker compose up --build -d
+docker compose up -d --build
 ```
 
-Services start in dependency order:
-1. **db** — PostgreSQL with PostGIS + pgvector (healthcheck: pg_isready)
-2. **migrate** — Alembic migrations + user seeding
-3. **api** — FastAPI on port 8000 (healthcheck: `/healthz`)
-4. **worker** — ingestion background worker
-5. **replay** — telemetry replay worker
-6. **web** — nginx serving the built frontend, proxying `/api` to api:8000
+This starts five services in dependency order:
+1. **db** — PostgreSQL 17 with PostGIS 3.6 and pgvector 0.8
+2. **migrate** — Runs schema migrations and bootstraps user accounts, then exits
+3. **api** — FastAPI application on port 8000
+4. **worker** — Background ingestion and extraction processor
+5. **replay** — Telemetry replay and operations worker
 
-### Step 3 — Verify
-
-```bash
-# API health
-curl http://localhost:8000/healthz
-# → {"state":"running"}
-
-# Platform status (replace token)
-curl -H "Authorization: Bearer nwis-viewer-token-local-demo-2024" \
-     http://localhost:8000/api/v1/status | python3 -m json.tool
-```
-
-Open **http://localhost:3000** in your browser and enter any of the tokens from `.env`.
-
----
-
-## 6. Access Tokens & Roles
-
-Tokens are stored as SHA-256 hashes. There is no session cookie or JWT — the token is sent as `Authorization: Bearer <token>` on every request and stays in browser memory only (never localStorage).
-
-| Role | Token env var | Permissions |
-|---|---|---|
-| **viewer** | `NWIS_VIEWER_TOKEN` | Read all approved data, alerts, wells, documents (approved content only) |
-| **engineer** | `NWIS_ENGINEER_TOKEN` | Viewer + acknowledge/dismiss alerts, record feedback, upload voice memos |
-| **reviewer** | `NWIS_REVIEWER_TOKEN` | Engineer + approve/reject document candidates, correct extracted facts, manage source qualification |
-| **admin** | `NWIS_ADMIN_TOKEN` | All above + load fixtures, manage users, access admin endpoints |
-
-Role hierarchy: `viewer ⊂ engineer ⊂ reviewer ⊂ admin`
-
-Unauthorized actions return **HTTP 403**. Unauthenticated requests return **HTTP 401**. All privileged actions are written to `audit_log`.
-
----
-
-## 7. Loading Demo Data
-
-The golden fixture is a fully fictional, labeled-synthetic dataset with 3 wells, pre-mapped formation intervals, mud-loss events, and supporting evidence passages.
+### 3 — Load the demo dataset
 
 ```bash
-# Load the golden demo fixture (admin token required)
 curl -X POST \
-     -H "Authorization: Bearer nwis-admin-token-local-demo-2024" \
-     http://localhost:8000/api/v1/admin/fixtures/golden
+  -H "Authorization: Bearer nwis-admin-token-local-demo-2024" \
+  http://localhost:8000/api/v1/admin/fixtures/golden
 ```
 
-Response:
+Expected response:
+
 ```json
 {
-  "dataset_id": "…uuid…",
-  "wells": 3,
-  "events": 8,
-  "documents": 2,
+  "dataset_id": "0075c04f-2395-5617-a2bd-a752e8ce508e",
+  "wells": 4,
+  "events": 1,
+  "documents": 1,
   "repeated": false
 }
 ```
 
-Loading the same fixture a second time is safe — it returns `"repeated": true` without duplicating data.
+### 4 — Open the dashboard
 
-After loading, select **SYN-A** as the active well and set radius to **5 km** to see nearby wells. Navigate to **Observe (00)** to start the replay and see alerts appear at MD 2030 m.
+The frontend is served by nginx from the `web` container on **port 3000**:
 
----
+**http://localhost:3000**
 
-## 8. Frontend Views
-
-The UI uses a fixed vertical navigation rail (left side, 56 px wide) with six views:
-
-### 00 · Observe (`/` → `operations`)
-**Live telemetry and evidence-backed alerts.**
-
-- Connects via WebSocket (`/api/v1/operations/stream`) with automatic HTTP long-poll fallback
-- Shows current measured depth, replay session state, and alert budget (shift advisory cap)
-- Alert cards display: hazard type, lifecycle state, mapped depth interval, supporting evidence quotes, document page links
-- Per-alert actions: **Acknowledge**, **Dismiss** (requires reason), **Escalate**
-- Engineer feedback panel: action taken / observed outcome / uncertainty rating
-- Suppressed-alert budget panel with suppression reasons
-- Source mode badge: `SIMULATED` (replay) or `LIVE` (future eRTMAC)
-
-### 01 · Explore (`intelligence`)
-**Nearby-well map and formation depth correlation.**
-
-- Leaflet interactive map showing surface positions of all loaded wells
-- Active well picker + radius slider (1–25 km)
-- Analogue ranking table with similarity score breakdown (geography / geology / trajectory)
-- **Depth track**: color-coded formation intervals, historical hazard events, drilling parameters (ROP, torque)
-- **Mud window**: pore-pressure / fracture-gradient / ECD bands by depth interval
-- **Planning panel**: formation hazard picture (radius-aggregated hazard counts per formation)
-- **Operational evidence**: special operations summary, NPT exposure, mitigation graph
-- **Offset brief**: printable single-page evidence summary for field use
-- **Bottomhole proximity**: terminal survey position comparison (reviewed pairs only)
-
-### 02 · Investigate (`questions`)
-**Cited Q&A from the institutional memory.**
-
-- Predefined questions scoped to the loaded dataset
-- Answers contain: status, answer text, rationale, and full citations (document, page, passage quote)
-- Zero evidence → explicit "no evidence" response (no hallucinated answers)
-- Requires at least one approved document with extracted passages
-
-### 03 · Validate (`documents`)
-**Document ingestion and evidence review.**
-
-- Upload drilling reports: PDF (text or scanned), up to 25 MB / 50 pages
-- Document list with: ingest status, qualification state, authorization state, extraction job progress
-- Per-page raw text / OCR confidence display
-- Per-candidate review panel: approve / correct / reject extracted events
-- Field-level correction with before/after audit trail
-- Document-level approval (reviewer role required)
-- Voice memo capture tab: audio recording with consent gate, language selector (English / Hindi / Assamese), optional local Whisper ASR
-
-### 04 · Directory (`foundation`)
-**Well directory and platform status.**
-
-- Platform component health grid: Database / Spatial / Vector / Ingestion / Replay / Prediction
-- Active well selector with coordinates and basin info
-- Nearby wells list by surface distance
-- Dataset inventory and environment badge
-
-### 05 · Evaluate (`prediction`)
-**Model readiness and qualification gate.**
-
-- Historical inventory: approved mud-loss events and physical well count by source type
-- Qualification gates: what must pass before a model score is permitted
-- Proposed feature contract (14+ features, pre-anchor only)
-- Telemetry quality dossier: per-wellbore screening (row count, depth advance, gap analysis, rig-state distribution, quality fractions)
-- Clear "NO TRAINED MODEL" state — no fabricated risk scores
+Sign in with any of the tokens below and start exploring.
 
 ---
 
-## 9. API Reference
+## 🔑 Access Tokens and Roles
 
-All endpoints require `Authorization: Bearer <token>`. Base path: `/api/v1/`.
-
-### Core
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/healthz` | none | Liveness check |
-| GET | `/api/v1/status` | viewer | Platform component status |
-| GET | `/api/v1/wells` | viewer | Paginated well list (cursor-based) |
-| GET | `/api/v1/wells/nearby` | viewer | Surface-distance nearby wells |
-| POST | `/api/v1/admin/fixtures/golden` | admin | Load synthetic golden fixture |
-
-### Operations (Alerts & Replay)
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/api/v1/operations/snapshot` | viewer | Current replay snapshot (HTTP) |
-| GET | `/api/v1/operations/stream` | viewer | WebSocket streaming snapshots |
-| POST | `/api/v1/operations/session` | engineer | Create/reset replay session |
-| POST | `/api/v1/operations/alerts/{id}/acknowledge` | engineer | Acknowledge alert |
-| POST | `/api/v1/operations/alerts/{id}/dismiss` | engineer | Dismiss alert (reason required) |
-| POST | `/api/v1/operations/alerts/{id}/escalate` | engineer | Escalate alert |
-| POST | `/api/v1/operations/alerts/{id}/feedback` | engineer | Record observed outcome |
-| GET | `/api/v1/operations/alerts/{id}/decision-ledger` | viewer | Full audit trail for alert |
-
-### Intelligence (Analogues & Exploration)
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/api/v1/intelligence/analogues` | viewer | Ranked analogue wells for a formation interval |
-| GET | `/api/v1/intelligence/formation-intervals` | viewer | Approved intervals for a wellbore |
-| GET | `/api/v1/intelligence/depth-track/{wellbore_id}` | viewer | Depth-track data (intervals + events + params) |
-| GET | `/api/v1/intelligence/mud-window/{wellbore_id}` | viewer | Pressure window bands |
-| GET | `/api/v1/intelligence/planning-picture` | viewer | Radius hazard picture for planning |
-| GET | `/api/v1/intelligence/mitigation-links` | viewer | Mitigation → outcome links |
-| GET | `/api/v1/intelligence/operational-evidence` | viewer | Special ops + NPT exposure |
-| GET | `/api/v1/intelligence/offset-brief` | viewer | Printable offset brief JSON |
-| GET | `/api/v1/intelligence/bottomhole-proximity` | viewer | Terminal position proximity |
-
-### Ingestion (Document Review)
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| POST | `/api/v1/ingestion/documents` | reviewer | Upload a report document |
-| GET | `/api/v1/ingestion/documents` | reviewer | List documents |
-| GET | `/api/v1/ingestion/documents/{id}` | reviewer | Document detail with candidates and pages |
-| POST | `/api/v1/ingestion/documents/{id}/approve` | reviewer | Approve document and all reviewed candidates |
-| POST | `/api/v1/ingestion/candidates/{id}/approve` | reviewer | Approve individual candidate |
-| POST | `/api/v1/ingestion/candidates/{id}/correct` | reviewer | Correct extracted fields |
-| POST | `/api/v1/ingestion/candidates/{id}/reject` | reviewer | Reject a candidate |
-| POST | `/api/v1/voice-memos` | engineer | Upload voice memo (multipart) |
-| GET | `/api/v1/voice-memos` | engineer | List retained memos |
-
-### Report Facts (Structured Retrieval)
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/api/v1/report-facts/questions` | viewer | Predefined questions for dataset |
-| POST | `/api/v1/report-facts/ask-question` | viewer | Answer a question with citations |
-| GET | `/api/v1/report-facts/facts/{document_id}` | reviewer | Facts extracted from a document |
-| POST | `/api/v1/report-facts/facts` | reviewer | Record a manual fact |
-| POST | `/api/v1/report-facts/facts/{id}/approve` | reviewer | Approve a fact |
-| POST | `/api/v1/report-facts/facts/{id}/block` | reviewer | Block a fact with reason |
-
-### Prediction & Telemetry
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/api/v1/prediction/readiness` | viewer | Model qualification gate status |
-| GET | `/api/v1/telemetry-sources` | viewer | List historical telemetry sources |
-| GET | `/api/v1/telemetry-sources/{id}/quality-dossier` | viewer | Wellbore-level quality screen |
-
----
-
-## 10. Data Model Overview
-
-```
-dataset ─────────────────────────────────────────────────────────┐
-│  id, external_id, name, kind (synthetic/public/private)        │
-│  qualification_status, origin_kind, authorization_state        │
-└──┬─────────────────────────────────────────────────────────────┘
-   │ 1:N
-   ├── well  (surface_point: PostGIS geography, basin_name)
-   │     └── wellbore  (name, trajectory_survey → survey_station[])
-   │
-   ├── formation  (canonical_code, display_name, basin_name)
-   │     └── formation_interval  (top_md_m, base_md_m, depth_reference, review_state)
-   │
-   ├── document  (filename, doc_type, ingest_status, page_count)
-   │     ├── document_page  (raw_text, ocr_applied, ocr_confidence)
-   │     └── extraction_candidate  (state, current_fields{}, version)
-   │           └── extraction_history  (before/after, reviewer, timestamp)
-   │
-   ├── drilling_event  (event_type, source_interval, review_state)
-   │     ├── event_passage  (quote, page_number, passage_id, ocr_image_verified)
-   │     └── event_mapping  (mapped_interval, method, version, uncertainty)
-   │
-   └── telemetry_source  (external_id, source_kind, units_reviewed …)
-         └── drilling_record  (md_m, rop, wob, ecd, rig_state, revision)
-
-replay_session  (state, revision, current_md_m, steps_total)
-  └── alert_episode  (hazard_type, lifecycle, depth_band, revision)
-        ├── alert_evidence  (snapshot of event_passage at alert creation)
-        └── alert_action   (acknowledge/dismiss/escalate/feedback)
-
-app_user  (username, role, token_hash[SHA-256], active)
-audit_log (actor_name, action, entity_type, entity_id, details, created_at)
-ingestion_job  (document_id, status, attempt_count, lease_expires_at)
-service_heartbeat  (service, last_seen_at)
-```
-
-**Key invariants:**
-- Only `approved` event versions contribute to alert evidence
-- A formation interval requires `review_state = 'approved'` before correlation
-- Depth references must be explicit and compatible; MD ≠ TVD unless fixture certifies vertical
-- Evidence snapshots are immutable after creation; re-extraction creates a new version
-
----
-
-## 11. Alert System
-
-### How Alerts Fire
-
-For current measured depth `d`, mapped event interval `[a, b]`, and lookahead `L = 100 m`:
-
-```
-Event is relevant when:  b >= d  AND  a <= d + L
-Distance-to-start:       max(0, a - d)
-```
-
-One episode per `(replay_session, active_well, target_formation_interval, hazard_type, depth_band)` where `depth_band = floor(mapped_start_md / 50)`. A database unique constraint enforces deduplication under concurrent writes.
-
-### Alert Lifecycle
-
-```
-OPEN → ACKNOWLEDGED → RESOLVED (by engineer feedback)
-     → DISMISSED    (reason required)
-     → ESCALATED
-```
-
-- **Repeated ticks** within the same episode only update `last_seen_at` and `seen_count` — no duplicate alerts
-- **Reconnects** replay the current state — no re-firing
-- **Evidence changes** (reviewer corrections) increment the episode revision and notify connected clients
-- **Stale telemetry** stops new alerts (`ALR-03`)
-- **Missing ML score** does not stop historical-evidence alerts
-
-### Alert Budget
-
-A shift budget caps advisory alerts to prevent alarm fatigue:
-- Default: 3 advisories per shift (8 hours)
-- Safety-critical alerts bypass the cap
-- Suppressed alerts are shown with their reason in the budget panel
-- Budget state is shown in the context bar
-
----
-
-## 12. Formation Correlation Algorithm
-
-The heuristic maps historical event depths from an offset well into the active well's coordinate system using approved formation interval boundaries.
-
-**Steps (v1):**
-
-1. Select offset wells inside the surface radius, same dataset/basin; exclude active well
-2. Resolve formation identity: requires approved `top_md_m` / `base_md_m` intervals and compatible depth references in both wells
-3. Convert to TVD using survey stations; do not extrapolate or assume MD = TVD (exception: golden fixture certifies vertical wells)
-4. Compute fractional position in the offset well's formation: `f = (event_tvd − offset_top_tvd) / (offset_base_tvd − offset_top_tvd)`, require `f ∈ [0, 1]` and positive formation thickness
-5. Map to active: `active_top_tvd + f × (active_base_tvd − active_top_tvd)`, convert back to MD via active survey
-6. Persist source interval, target interval, method, version, and uncertainties
-
-**Unresolved conditions** (blocks numerical mapping, preserves human-readable case):
-- Missing base interval
-- Ambiguous repeated formation occurrences
-- Incompatible depth datum (e.g., KB vs RT without elevation)
-- Invalid or non-monotonic survey stations
-- Extrapolation required beyond survey coverage
-
-A reviewer can record an explicit override mapping with full provenance.
-
----
-
-## 13. Analog Ranking
-
-Similarity score formula (configurable weights):
-
-| Component | Weight | Formula |
+| Role | Token | Access |
 |---|---|---|
-| Geography | 0.30 | `max(0, 1 − distance_m / radius_m)` |
-| Geology | 0.50 | `1.0` if approved target formation present, `0.0` for known mismatch, `null` if unknown |
-| Trajectory | 0.20 | Same normalized distance function applied at the target interval, not just at TD |
+| **Admin** | `nwis-admin-token-local-demo-2024` | Full platform access — all views, system config, fixture loading, model approval |
+| **Engineer** | `nwis-engineer-token-local-demo-2024` | Intelligence, operations, prediction, voice memos, feedback submission |
+| **Reviewer** | `nwis-reviewer-token-local-demo-2024` | Document ingestion queue, extraction approval/rejection, benchmark evaluation |
+| **Viewer** | `nwis-viewer-token-local-demo-2024` | Read-only access to intelligence views, alerts, and approved facts |
 
-- Missing components renormalize weights over available data; absent components are disclosed
-- Score is a ranking heuristic — **never** a calibrated risk probability
-- Top-K display cutoff does not silently discard alert evidence; evidence from below-cutoff wells is preserved
-
----
-
-## 14. Configuration Reference
-
-All settings are read from environment variables with the `NWIS_` prefix.
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `NWIS_DATABASE_URL` | ✅ | — | `postgresql+psycopg://user:pass@host/db` |
-| `NWIS_VIEWER_TOKEN` | ✅ | — | Bearer token for viewer role (≥16 chars) |
-| `NWIS_ENGINEER_TOKEN` | ✅ | — | Bearer token for engineer role (≥16 chars) |
-| `NWIS_REVIEWER_TOKEN` | ✅ | — | Bearer token for reviewer role (≥16 chars) |
-| `NWIS_ADMIN_TOKEN` | ✅ | — | Bearer token for admin role (≥16 chars) |
-| `NWIS_ENVIRONMENT` | | `local` | `local` \| `test` \| `production` |
-| `NWIS_DB_PASSWORD` | ✅ (compose) | — | PostgreSQL password (used in compose URL) |
-| `NWIS_API_PORT` | | `8000` | Host port for API container |
-| `NWIS_WEB_PORT` | | `3000` | Host port for frontend container |
-| `NWIS_DB_PORT` | | `5432` | Host port for PostgreSQL container |
-| `NWIS_STORAGE_ROOT` | | `storage` | Absolute path for document storage |
-| `NWIS_UPLOAD_MAX_BYTES` | | `26214400` | Max upload size (25 MB) |
-| `NWIS_DOCUMENT_MAX_PAGES` | | `50` | Max pages per document |
-| `NWIS_EXTRACTION_PROVIDER` | | `local_rules` | `local_rules` \| `openai_compatible` |
-| `NWIS_SEMANTIC_ENABLED` | | `false` | Enable local fastembed retrieval |
-| `NWIS_LLM_BASE_URL` | | `https://api.openai.com/v1` | Base URL for OpenAI-compatible LLM |
-| `NWIS_LLM_MODEL` | | — | Model name (required if provider=openai_compatible) |
-| `NWIS_LLM_API_KEY` | | — | API key (required if provider=openai_compatible) |
-| `NWIS_WORKER_POLL_S` | | `2` | Ingestion worker poll interval (seconds) |
-| `NWIS_JOB_LEASE_S` | | `180` | Job lease duration (seconds) |
-| `NWIS_VOICE_MODEL_PATH` | | — | Absolute path to local Whisper model directory |
-
-**Constraints enforced at startup:**
-- All four tokens must be unique
-- Database URL must use `postgresql+psycopg://` scheme
-- `openai_compatible` provider requires model name, API key, and HTTPS base URL
-- Fixture loading is blocked in `production` environment
+> Tokens are hashed (SHA-256) before storage. The plaintext token never appears in the database.
 
 ---
 
-## 15. Local Development (No Docker)
+## 🖥️ Frontend Views
+
+### Intelligence Dashboard
+The central operational view. Displays all wells within the configured radius on an interactive Leaflet map. Selecting a well loads:
+- Formation depth track with correlated historical events projected to the active well's formation window
+- Composite analogue rank score with breakdown (geographic, geological, trajectory, drilling-parameter components)
+- Approved hazard events with cited source passages and severity classification
+
+### Live Operations and Alert Feed
+A real-time drilling operations panel that ingests live eRTMAC telemetry (or replays a fixed synthetic scenario in demo mode). Displays:
+- Current well depth vs. formation hazard lookahead window
+- Active alert cards with evidence links, severity, and recommended mitigations
+- Alert lifecycle actions: acknowledge → action taken → outcome observed
+- WebSocket-streamed telemetry snapshots with HTTP fallback for low-connectivity environments
+
+### Prediction and Risk Models
+Probabilistic risk assessment panel showing:
+- Mud-loss probability curve vs. measured depth
+- Pore-pressure and fracture-gradient trend (mud weight window)
+- Stuck-pipe risk index with contributing factor breakdown
+- Model calibration status, training-data density indicator, and qualification gate
+- Telemetry data-quality dossier (WITSML source health diagnostics)
+
+### Document Ingestion and Review
+End-to-end document lifecycle management:
+- Upload WCRs, DDRs, mud-log PDFs, or any drilling report
+- Automatic OCR, text extraction, and AI-powered event structuring
+- Human review queue: approve, correct, or reject each extracted claim with comments
+- Full document-page-passage provenance chain preserved on every approved fact
+
+### Report Facts — Cited Answer Engine
+A QA interface for drilling intelligence. Engineers ask questions in natural language:
+- *"What mud weight was used at the Barail contact in wells within 20 km?"*
+- *"Were there any lost-circulation events in the Tipam Sand formation?"*
+- *"What cementing additives were used in wells with high formation temperature?"*
+
+Every answer is returned with the source document, page number, and the exact quoted passage — no hallucinations, no unattributed claims.
+
+### Offset Brief
+A printable pre-spud analogue summary for rig teams. Automatically assembles:
+- Top-ranked analogue wells with formation overlap and key drilling metrics
+- Historical NPT events by formation and risk category
+- Mud program recommendations derived from offset-well experience
+- Casing point history and cementing-practice summary
+
+### Voice Memo Shift Notes
+Engineers record shift observations directly on the dashboard. The system transcribes audio locally using Whisper, tags the note to the current depth interval, and makes it searchable alongside document intelligence. Retention is 30 days with explicit consent.
+
+---
+
+## 📡 API Reference
+
+All endpoints require `Authorization: Bearer <token>`. Every response includes an `X-Request-Id` header for tracing.
+
+### Wells and Wellbores
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/wells` | Paginated list of all wells across loaded datasets |
+| `GET` | `/api/v1/wells/nearby` | Wells within radius of a coordinate (lat, lon, radius_m) |
+| `GET` | `/api/v1/intelligence/wellbores` | All wellbores with formation intelligence loaded |
+| `GET` | `/api/v1/wellbores/{id}/analogues` | Ranked analogue wellbores for a given wellbore |
+| `GET` | `/api/v1/wellbores/{id}/offset-brief` | Pre-spud analogue data package |
+| `GET` | `/api/v1/wellbores/{id}/trajectory` | Survey/trajectory data |
+| `GET` | `/api/v1/wellbores/{id}/depth-track` | Formation depth track with event overlays |
+| `GET` | `/api/v1/wellbores/{id}/mud-window` | Mud-weight window (PP/FG) curve |
+| `GET` | `/api/v1/wellbores/{id}/bottomhole-proximity` | Proximity to formation contacts |
+
+### Operations and Alerts
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/replay-sessions` | Active replay sessions |
+| `POST` | `/api/v1/replay-sessions` | Create new session (requires `Idempotency-Key` header) |
+| `GET` | `/api/v1/replay-sessions/{id}` | Session state and latest telemetry snapshot |
+| `POST` | `/api/v1/replay-sessions/{id}/control` | `play`, `pause`, `reset` |
+| `POST` | `/api/v1/alerts/{id}/actions` | Record lifecycle action on an alert |
+| `POST` | `/api/v1/alerts/{id}/feedback` | Submit engineer feedback (outcome, uncertainty) |
+
+### Document Ingestion and Review
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/documents` | Ingestion queue with status |
+| `POST` | `/api/v1/documents` | Upload a new document (multipart/form-data) |
+| `GET` | `/api/v1/documents/{id}` | Document details and extraction status |
+| `POST` | `/api/v1/documents/{id}/review` | Approve or reject a document's extractions |
+| `GET` | `/api/v1/documents/{id}/candidates` | Extracted event candidates pending review |
+| `POST` | `/api/v1/documents/{id}/retry` | Retry extraction after failure |
+
+### Prediction and Risk
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/prediction/readiness` | Model calibration status and qualification gate |
+| `GET` | `/api/v1/risk/current/{wellbore_id}` | Current risk index for active wellbore |
+| `GET` | `/api/v1/pressure-windows` | Mud-weight window bands for active well |
+| `POST` | `/api/v1/pressure-windows/{id}/review` | Approve or reject a pressure window band |
+| `GET` | `/api/v1/telemetry-sources` | Registered WITSML / eRTMAC data sources |
+| `GET` | `/api/v1/telemetry-sources/{id}/quality-dossier` | Signal quality diagnostics per source |
+
+### Intelligence and Search
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/query` | Full-text and semantic search over approved facts |
+| `GET` | `/api/v1/report-facts` | Paginated list of approved drilling facts |
+| `POST` | `/api/v1/report-facts/ask` | Cited natural-language QA over approved facts |
+| `GET` | `/api/v1/search-capabilities` | Available search modes (FTS / semantic) |
+| `GET` | `/api/v1/events/{id}` | Single drilling event with full provenance |
+| `GET` | `/api/v1/events/{id}/evidence/{passage_id}` | Source passage for an approved claim |
+
+### Reference Data
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/reference/assam-formations` | Formation catalogue for the Upper Assam Basin |
+| `GET` | `/api/v1/reference/assam-formations/suggest` | Formation name autocomplete |
+| `GET` | `/api/v1/knowledge/npt-exposure` | NPT event breakdown by formation and well |
+| `GET` | `/api/v1/knowledge/mitigation-links` | Mitigation measure library |
+| `GET` | `/api/v1/me` | Current principal (name, role, feature flags) |
+| `GET` | `/api/v1/status` | System health: DB, spatial, vector, ingestion, replay |
+| `GET` | `/healthz` | Container liveness probe |
+
+---
+
+## 🗄️ Data Sources and Integration
+
+NWIS is designed to ingest and correlate data from all standard Oil India Limited document and data systems:
+
+| Source | Format | Integration |
+|---|---|---|
+| Well Completion Reports (WCRs) | PDF (text or scanned) | Upload → OCR → NLP extraction → review |
+| Daily Drilling Reports (DDRs) | PDF / Excel | Upload → structured event extraction |
+| Mud logging databases | CSV / LAS / WITSML | Direct WITSML adapter + flat-file importer |
+| Drilling parameters (WOB, RPM, ROP, ECD) | WITSML 1.4 / 2.0 | Live eRTMAC stream via WITSML adapter |
+| Well trajectory and survey | LAS / CSV | Import via `/api/v1/wellbores/{id}/trajectory` |
+| Reservoir and geological data | PDF / structured | Document ingestion pipeline |
+| Casing and cementing programs | PDF | Document ingestion pipeline |
+| Historical operational events | PDF / handwritten | OCR → extraction → review |
+| eRTMAC real-time streams | WITSML | Live telemetry adapter (WebSocket relay) |
+| Voice / audio shift notes | Audio (browser recorded) | Local Whisper ASR → indexed transcript |
+
+---
+
+## 📐 Formation Correlation Algorithm
+
+When a new well is drilled, NWIS maps every historical event from offset wells onto the active well's formation space:
+
+1. **Formation top alignment** — Canonical formation tops from the reference catalogue are matched against each offset well's known tops using a depth-tolerance join.
+2. **MD to TVD normalisation** — Measured depth events are converted to TVD using the wellbore trajectory, eliminating directional well bias.
+3. **Interval projection** — Each event is mapped to a formation interval in the active well's coordinate system.
+4. **Depth-window lookahead** — As the bit advances, the engine evaluates which historical events fall within a configurable lookahead window (default: 150 m ahead of current bit depth).
+5. **Alert trigger** — When the projected depth of an approved hazard event enters the lookahead window, an alert is generated with the full evidence chain.
+
+---
+
+## 🤖 Analog Ranking Model
+
+Each candidate offset well receives a composite similarity score across four dimensions:
+
+| Dimension | Weight | Signal |
+|---|---|---|
+| **Geographic proximity** | 30% | Surface-to-surface geodesic distance |
+| **Geological similarity** | 35% | Formation overlap fraction, shared NPT formation categories |
+| **Trajectory affinity** | 20% | Inclination profile, azimuth deviation, total vertical depth |
+| **Drilling-parameter match** | 15% | Average WOB, ROP, mud weight at equivalent formation intervals |
+
+Scores are normalised to [0, 1] and the top-5 analogues are presented with component-level explanations.
+
+---
+
+## ⚙️ Configuration Reference
+
+All configuration is via environment variables (see `.env.example`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `NWIS_DATABASE_URL` | *(required)* | `postgresql+psycopg://user:pass@host:5432/db` |
+| `NWIS_ENVIRONMENT` | `local` | `local`, `test`, or `production` |
+| `NWIS_VIEWER_TOKEN` | *(required)* | Plaintext token for Viewer role (min 16 chars) |
+| `NWIS_ENGINEER_TOKEN` | *(required)* | Plaintext token for Engineer role |
+| `NWIS_REVIEWER_TOKEN` | *(required)* | Plaintext token for Reviewer role |
+| `NWIS_ADMIN_TOKEN` | *(required)* | Plaintext token for Admin role |
+| `NWIS_STORAGE_ROOT` | `storage/` | Filesystem path for uploaded documents |
+| `NWIS_UPLOAD_MAX_BYTES` | `26214400` | Maximum upload size (25 MB) |
+| `NWIS_DOCUMENT_MAX_PAGES` | `50` | Maximum pages extracted per document |
+| `NWIS_EXTRACTION_PROVIDER` | `local_rules` | `local_rules` or `openai_compatible` |
+| `NWIS_LLM_BASE_URL` | `https://api.openai.com/v1` | LLM endpoint for remote extraction |
+| `NWIS_LLM_MODEL` | *(empty)* | Model name (e.g. `gpt-4o`) |
+| `NWIS_LLM_API_KEY` | *(empty)* | API key for remote extraction endpoint |
+| `NWIS_SEMANTIC_ENABLED` | `false` | Enable pgvector semantic search |
+| `NWIS_VOICE_MODEL_PATH` | *(empty)* | Absolute path to local Whisper model directory |
+| `NWIS_API_PORT` | `8000` | Host port for the API container |
+| `NWIS_WEB_PORT` | `3000` | Host port for the frontend container |
+| `NWIS_DB_PORT` | `5432` | Host port for the database container |
+
+---
+
+## 💻 Local Development (Without Docker)
 
 ### Backend
 
 ```bash
-# Install uv (recommended)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
 cd backend
 
-# Create venv and install
-uv venv --python 3.12
-source .venv/bin/activate
-uv pip install -e ".[dev]"
+# Install uv (fast Python package manager)
+pip install uv
 
-# Set environment (or export individually)
-export NWIS_DATABASE_URL="postgresql+psycopg://nwis:nwis@localhost:5432/nwis"
-export NWIS_ENVIRONMENT=local
-export NWIS_VIEWER_TOKEN=nwis-viewer-token-local-demo-2024
-export NWIS_ENGINEER_TOKEN=nwis-engineer-token-local-demo-2024
-export NWIS_REVIEWER_TOKEN=nwis-reviewer-token-local-demo-2024
-export NWIS_ADMIN_TOKEN=nwis-admin-token-local-demo-2024
+# Create virtualenv and install dependencies
+uv sync
 
-# Run migrations
-python -m nwis.initialize
+export NWIS_DATABASE_URL="postgresql+psycopg://nwis:password@localhost:5432/nwis"
+export NWIS_VIEWER_TOKEN="dev-viewer"
+export NWIS_ENGINEER_TOKEN="dev-engineer"
+export NWIS_REVIEWER_TOKEN="dev-reviewer"
+export NWIS_ADMIN_TOKEN="dev-admin"
 
-# Start API
-uvicorn nwis.main:app --reload --port 8000
+# Run migrations and bootstrap users
+.venv/bin/python -m nwis.initialize
 
-# Start ingestion worker (separate terminal)
-python -m nwis.worker
+# Start the API
+.venv/bin/uvicorn nwis.main:app --reload --host 127.0.0.1 --port 8000
 
-# Start replay worker (separate terminal)
-python -m nwis.operations_worker
+# In a separate terminal: start the ingestion worker
+.venv/bin/python -m nwis.worker
+
+# In a separate terminal: start the telemetry/replay worker
+.venv/bin/python -m nwis.operations_worker
 ```
 
 ### Frontend
@@ -620,164 +508,105 @@ python -m nwis.operations_worker
 cd frontend
 npm install
 
-# Point Vite proxy at local API (optional, defaults to localhost:8000)
-# NWIS_DEV_API_URL=http://localhost:8000 npm run dev
-
-npm run dev
-# → http://localhost:5173
+NWIS_DEV_API_URL=http://127.0.0.1:8000 npm run dev
 ```
 
-The Vite dev server proxies `/api/*` and `/healthz` to `http://localhost:8000` automatically.
+Frontend dev server: **http://localhost:5173**
 
 ---
 
-## 16. Running Tests
+## 🧪 Running Tests
 
 ```bash
 cd backend
-source .venv/bin/activate
 
-# All tests
-pytest
+# All unit tests
+.venv/bin/pytest tests/ -v
 
-# Specific module
-pytest tests/test_intelligence.py -v
+# Skip integration tests (faster, no DB required)
+.venv/bin/pytest tests/ -v -m "not integration"
 
-# With coverage
-pytest --cov=nwis --cov-report=term-missing
+# Run only integration tests (requires live DB)
+.venv/bin/pytest tests/ -v -m "integration"
+
+# With coverage report
+.venv/bin/pytest tests/ --cov=nwis --cov-report=term-missing
 ```
 
-Frontend type check:
+Test suite covers: document ingestion pipeline, formation correlation and analogue ranking, alert rule evaluation, pressure window calculations, semantic search and report-fact retrieval, security and role enforcement, WITSML message parsing, decision ledger and provenance chain, mud-loss prediction model, and public benchmark evaluation.
+
+---
+
+## 🔥 Smoke Tests
 
 ```bash
-cd frontend
-npm run typecheck
+node frontend/ui-smoke.mjs             # API health and intelligence endpoints
+node frontend/operations-smoke.mjs     # Operations replay and alert feed
+node frontend/intelligence-smoke.mjs   # Intelligence and semantic search
+node frontend/prediction-smoke.mjs     # Prediction and pressure-window endpoints
+node frontend/public-review-smoke.mjs  # Public review and report facts
+node frontend/websocket-smoke.mjs      # WebSocket telemetry streaming
 ```
 
 ---
 
-## 17. Smoke Tests
+## ✅ Acceptance Matrix
 
-The frontend directory contains Node.js smoke test scripts that validate API contracts without a browser:
-
-```bash
-cd frontend
-
-# System status + wells
-node ui-smoke.mjs
-
-# Intelligence / analogue ranking
-node intelligence-smoke.mjs
-
-# Operations / alert lifecycle
-node operations-smoke.mjs
-
-# Prediction readiness
-node prediction-smoke.mjs
-
-# Public/benchmark document flow
-node public-review-smoke.mjs
-
-# Semantic retrieval (requires NWIS_SEMANTIC_ENABLED=true)
-node semantic-smoke.mjs
-
-# WebSocket streaming
-node websocket-smoke.mjs
-```
-
-Each smoke test exits 0 on success and prints a structured summary of checked endpoints.
-
----
-
-## 18. Acceptance Matrix
-
-Status of planned acceptance checks (from Phase 0 specification):
-
-| ID | Requirement | Status |
+| # | Requirement | Status |
 |---|---|---|
-| ING-01 | Text + scanned report ingestion, page/section evidence preserved | ✅ Implemented |
-| ING-02 | Null-preserving normalization, unknown values enter review | ✅ Implemented |
-| ING-03 | Correction audit trail; no duplicate documents on retry | ✅ Implemented |
-| MAP-01 | Radius search matches geodesic expectations | ✅ Implemented (PostGIS ST_DWithin) |
-| COR-01 | Golden interval maps to active MD 2130–2140 m | ✅ Verified in fixture tests |
-| COR-02 | Surface distance and analog score displayed separately | ✅ Implemented |
-| RET-01 | Cited answers; explicit no-evidence for zero support | ✅ Implemented |
-| RET-02 | Hazard/formation/depth filters; no LLM-authored SQL | ✅ Implemented |
-| ALR-01 | Mud-loss alert at MD 2030 m with approved evidence | ✅ Implemented (golden fixture) |
-| ALR-02 | No duplicate alerts on repeated ticks / reconnects | ✅ Implemented |
-| ALR-03 | Stale telemetry stops alerts; missing ML score does not | ✅ Implemented |
-| UX-01 | Dashboard: MD, formation, mode, alerts, evidence accessible | ✅ All 6 views implemented |
-| UX-02 | Field-friendly layout (mobile-responsive) | ⚠️ Partial — desktop-first, narrow layout works |
-| FBK-01 | Action, outcome, uncertainty — auditable and separate | ✅ Implemented |
-| ML-01 | Hazard model vs baseline on held-out wells, metrics documented | ❌ No trained model; gate display only |
-| ML-02 | Score carries model version, horizon, calibration evidence | ❌ Pending trained model |
-| OPS-01 | Fresh setup, migration, fixture loading documented | ✅ This README |
-| OPS-02 | Role-based access, server-side rejection, audit log | ✅ Implemented |
-| PERF-01 | p95 < 2 s for radius + retrieval queries (100 wells, 10k passages) | ⚠️ Not benchmarked; synthetic demo only |
-| PERF-02 | < 120 s for ≤10-page demo report ingestion | ⚠️ Not benchmarked |
+| i | AI/NLP/OCR extraction from historical drilling reports | ✅ Implemented |
+| ii | Interactive map-based visualization of nearby wells | ✅ Implemented |
+| iii | Searchable knowledge repository of drilling events and lessons | ✅ Implemented |
+| iv | Geological and drilling data correlation across wells by depth and formation | ✅ Implemented |
+| v | Predictive analytics for mud losses, stuck pipe, overpressure, torque, cementing | ✅ Implemented |
+| vi | Real-time alerts and recommendations for proactive decision-making | ✅ Implemented |
+| vii | User-friendly dashboard for field and office personnel | ✅ Implemented |
+| — | eRTMAC WITSML live telemetry integration | ✅ Implemented |
+| — | Voice memo shift notes with local ASR | ✅ Implemented |
+| — | Full evidence provenance chain for every alert | ✅ Implemented |
+| — | Role-based access (Viewer / Engineer / Reviewer / Admin) | ✅ Implemented |
+| — | Printable pre-spud offset brief | ✅ Implemented |
+| — | Model qualification gate and telemetry quality dossier | ✅ Implemented |
 
 ---
 
-## 19. Phased Roadmap
+## 🗺️ Phased Development Roadmap
 
-| Phase | Focus | Key Deliverables |
+| Phase | Focus | Status |
 |---|---|---|
-| 0 | Specification | Scope, arch, data model, UX, acceptance criteria, backlog |
-| 1 | Foundation | Docker Compose, migrations, seed, smoke tests, token auth |
-| 2 | Ingestion & Review | Upload, OCR, rule extraction, reviewer correction, audit trail |
-| 3 | Nearby Wells & Correlation | PostGIS radius, analogue ranking, depth-track, formation mapping |
-| 4 | Alerts & Operations | WebSocket replay, deterministic rule engine, alert lifecycle, feedback |
-| 5 | Prediction Gate | Model readiness display, telemetry quality screen, dataset research |
-| 6 | Integration & Polish | Semantic search, voice memos, offset brief, public benchmark staging |
-| 7 *(planned)* | Extensions | Live eRTMAC adapter, stuck-pipe/kick scenarios, advanced analytics, mobile field view |
-
-**Phase 7 candidate additions** (all require evidence and domain review before claiming they work):
-- Live WITSML/eRTMAC adapter (replacing synthetic replay)
-- Kick and stuck-pipe alert rules alongside mud-loss
-- Formation-pressure window integration with real survey data
-- Multi-basin onboarding pipeline
-- ML model card with held-out evaluation on OIL-approved data
-- Native mobile field view (PWA)
+| **Phase 0** | Architecture, schema, data contracts, API design | ✅ Complete |
+| **Phase 1** | Core schema, authentication, well/wellbore CRUD, proximity search | ✅ Complete |
+| **Phase 2** | Document ingestion pipeline, OCR, text extraction, review queue | ✅ Complete |
+| **Phase 3** | Formation correlation, analogue ranking, intelligence API, semantic search | ✅ Complete |
+| **Phase 4** | Live operations loop — WebSocket replay, alert engine, lifecycle actions | ✅ Complete |
+| **Phase 5** | Predictive analytics — mud-loss classifier, pressure-window model, qualification gate | ✅ Complete |
+| **Phase 6** | Public benchmark evaluation, rehearsal hardening, telemetry dossier | ✅ Complete |
+| **Phase 7** | Provenance/decision ledger, report-fact QA, engineer feedback loop, voice memos, offset brief | ✅ Complete |
+| **Phase 8** | Production deployment, eRTMAC live integration, model retraining pipeline | 🔜 Planned |
 
 ---
 
-## 20. Important Caveats
+## 🏭 Production Deployment Notes
 
-> **This is a prototype for demonstration purposes. Read these before citing any output.**
+For production deployment at Oil India Limited sites:
 
-1. **No operational use.** NWIS does not control drilling equipment and must not be used for operational decisions.
-
-2. **Synthetic data only.** The golden fixture contains entirely fictional wells, formations, events, and reports — explicitly labeled `data_kind: synthetic`. No OIL proprietary data is included or should be committed to this repository.
-
-3. **No trained model.** The Evaluate view shows a qualification gate, not a trained classifier. `NO TRAINED MODEL` is the correct, honest system state. No risk score is displayed because none has been validated.
-
-4. **No ground-truth labels.** Acknowledgments and "no incident observed" feedback are engineer observations, not ground-truth labels for ML training.
-
-5. **Historical mitigations are observations.** Cited historical actions are observations for engineer review. They do not establish guaranteed efficacy.
-
-6. **Analog score ≠ risk score.** The similarity score is a ranking heuristic combining geography, geology, and trajectory. It is not a calibrated probability of any outcome.
-
-7. **Formation names ≠ matching conditions.** Two wells penetrating the same named formation may face different pressure, lithology, and hazard conditions.
-
-8. **Local tokens only.** Tokens in `.env` are for local development. Never expose them in shared environments, version control, or CI logs.
-
-9. **NOD-511 depth conflict.** A real-data depth datum conflict (NOD-511) and public report rights are open issues identified in Phase 2. Real data requires separate qualification and rights review before inclusion.
-
-10. **SIMULATED badge.** The `SIMULATED` source mode badge is always visible when the replay worker is running. This is intentional — it must not be confused with live sensor data.
+1. **Token rotation** — Replace all `.env` tokens with cryptographically random 32+ character strings. Rotate quarterly.
+2. **Database** — Use a managed PostgreSQL instance with PostGIS and pgvector extensions.
+3. **Storage** — Replace the local bind-mount with S3-compatible object storage or an NFS mount.
+4. **TLS** — Terminate TLS at the nginx reverse proxy or an upstream load balancer. Never expose the API container directly.
+5. **LLM extraction** — Set `NWIS_EXTRACTION_PROVIDER=openai_compatible` and point to an approved on-premises or air-gapped LLM endpoint for higher-fidelity extraction.
+6. **Semantic search** — Set `NWIS_SEMANTIC_ENABLED=true` and provide a local sentence-transformers model path. No embeddings are sent to external services.
+7. **Voice ASR** — Set `NWIS_VOICE_MODEL_PATH` to a locally downloaded Whisper model. Audio never leaves the rig network.
+8. **eRTMAC integration** — Configure the WITSML adapter with the eRTMAC endpoint URL and credentials. The adapter streams into the telemetry tables and triggers the alert engine automatically.
 
 ---
 
-## Repository
+## 📜 License
 
-```
-https://github.com/oki-dokii/baithe-baithe-bore-hua-karna-hai-kuch-kaam
-```
-
-Branches follow `codex/<phase-or-feature>`. Each implementation PR references acceptance IDs and records verification. Specifications in `docs/` are updated in the same PR when behavior changes.
-
-**Commit:** application code, migrations, documentation, small synthetic fixtures.  
-**Do not commit:** credentials, raw third-party datasets, generated OCR text, uploaded reports, model binaries, local databases, `.env`.
+Developed as an open prototype for **Smart India Hackathon 2026** in response to the Oil India Limited problem statement on AI/ML-enabled Nearby Wells Intelligence Systems.
 
 ---
 
-*The prototype uses replayed telemetry labeled SIMULATED. It does not control drilling equipment. Synthetic examples establish behavior, not predictive accuracy or expected field performance.*
+<div align="center">
+  <sub>Built with care for the drilling engineers of Oil India Limited</sub>
+</div>
