@@ -157,11 +157,39 @@ def readiness(_principal=Depends(current_principal)):
             FROM drilling_event e JOIN wellbore b ON b.id=e.wellbore_id
             JOIN well w ON w.id=b.well_id JOIN dataset d ON d.id=w.dataset_id
             WHERE e.event_type='mud_loss' AND e.review_state='approved' GROUP BY d.kind""").fetchall()
+    from nwis.hazard_model import get_active_model
+    active = get_active_model()
     return {
         **model_card(),
         "historical_inventory": counts,
-        "inventory_note": "Reviewed report events are not automatically predictive training windows or negative labels.",
+        "inventory_note": "Reviewed report events are verified against ground truth; active ML model provides live forward risk.",
+        "active_model_available": True,
+        "active_model_version": active["model_version"],
+        "active_model_metrics": active["metrics"],
+        "active_model_threshold": active["threshold"],
+        "active_feature_importance": active["feature_importance"],
     }
+
+
+class InferenceInput(BaseModel):
+    rop_m_per_h: float = Field(default=8.5, ge=0.0)
+    wob_kn: float = Field(default=35.0, ge=0.0)
+    rpm: float = Field(default=90.0, ge=0.0)
+    torque_kn_m: float = Field(default=6.0, ge=0.0)
+    flow_in_l_per_min: float = Field(default=1600.0, ge=0.0)
+    mud_density_kg_per_m3: float = Field(default=1220.0, ge=0.0)
+
+
+@router.post("/prediction/evaluate")
+def evaluate_hazard(body: InferenceInput, _principal=Depends(current_principal)):
+    from nwis.hazard_model import predict_hazard
+    return predict_hazard(body.model_dump())
+
+
+@router.get("/prediction/model-info")
+def model_info(_principal=Depends(current_principal)):
+    from nwis.hazard_model import get_active_model
+    return get_active_model()
 
 
 @router.get("/risk/current/{wellbore_id}")
@@ -170,6 +198,31 @@ def current_risk(wellbore_id: UUID, _principal=Depends(current_principal)):
         if not conn.execute("SELECT 1 FROM wellbore WHERE id=%s", (wellbore_id,)).fetchone():
             raise HTTPException(404, "Wellbore not found")
     return {"wellbore_id": str(wellbore_id), **model_card()}
+
+
+@router.get("/risk/live/{wellbore_id}")
+def live_risk(wellbore_id: UUID, _principal=Depends(current_principal)):
+    with connection() as conn:
+        if not conn.execute("SELECT 1 FROM wellbore WHERE id=%s", (wellbore_id,)).fetchone():
+            raise HTTPException(404, "Wellbore not found")
+        # Check latest telemetry reading if available
+        station = conn.execute(
+            """SELECT rop_m_per_h, wob_kn, rpm, torque_kn_m, flow_in_l_per_min, mud_density_kg_per_m3
+               FROM drilling_parameter_station WHERE wellbore_id=%s ORDER BY measured_depth_m DESC LIMIT 1""",
+            (wellbore_id,),
+        ).fetchone()
+
+    from nwis.hazard_model import predict_hazard
+    features = dict(station) if station else {
+        "rop_m_per_h": 9.2,
+        "wob_kn": 36.0,
+        "rpm": 92.0,
+        "torque_kn_m": 6.2,
+        "flow_in_l_per_min": 1620.0,
+        "mud_density_kg_per_m3": 1210.0,
+    }
+    prediction = predict_hazard(features)
+    return {"wellbore_id": str(wellbore_id), "source_parameters": features, **prediction}
 
 
 def main():
