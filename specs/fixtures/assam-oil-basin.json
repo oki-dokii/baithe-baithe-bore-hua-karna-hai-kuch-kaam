@@ -1,0 +1,235 @@
+{
+  "schema_version": "0.1.0",
+  "dataset_id": "oil-assam-basin-reference-v1",
+  "data_kind": "synthetic",
+  "dataset_name": "OIL Assam-Arakan Basin Operational Offset Suite",
+  "description": "Geologically calibrated reference wells across Nahorkatiya, Moran, Digboi, Baghjan, and Kusijan fields with verified Assam lithostratigraphy and historical incident reports.",
+  "depth_unit": "m",
+  "coordinate_crs": "EPSG:4326",
+  "coordinate_order": "longitude_latitude",
+  "depth_reference": {
+    "kind": "kelly_bushing",
+    "elevation_above_msl_m": 128.5,
+    "all_wells_vertical": false,
+    "md_equals_tvd": false
+  },
+  "config": {
+    "radius_km": 45,
+    "lookahead_m": 100,
+    "episode_band_m": 50,
+    "notification_cooldown_s": 300,
+    "telemetry_stale_after_s": 15,
+    "model_available": true
+  },
+  "active_well_id": "NHK-302",
+  "wells": [
+    {
+      "id": "NHK-302",
+      "wellbore_id": "NHK-302-MAIN",
+      "name": "Nahorkatiya NHK-302 (Active)",
+      "basin_name": "ASSAM_ARAKAN",
+      "point": [95.345, 27.285],
+      "formations": [
+        {"id": "siwalik_dhekiajuli", "interval_id": "NHK-INT-DHEK", "top_m": 0, "base_m": 820},
+        {"id": "girujan", "interval_id": "NHK-INT-GIRU", "top_m": 820, "base_m": 1950},
+        {"id": "tipam", "interval_id": "NHK-INT-TIPAM", "top_m": 1950, "base_m": 2680},
+        {"id": "barail", "interval_id": "NHK-INT-BARAIL", "top_m": 2680, "base_m": 3380},
+        {"id": "kopili", "interval_id": "NHK-INT-KOPILI", "top_m": 3380, "base_m": 3650}
+      ],
+      "survey": [
+        {"md_m": 0, "tvd_m": 0},
+        {"md_m": 800, "tvd_m": 798},
+        {"md_m": 1950, "tvd_m": 1910},
+        {"md_m": 2680, "tvd_m": 2580},
+        {"md_m": 3380, "tvd_m": 3210},
+        {"md_m": 3650, "tvd_m": 3420}
+      ]
+    },
+    {
+      "id": "MOR-045",
+      "wellbore_id": "MOR-045-MAIN",
+      "name": "Moran MOR-045 (Offset)",
+      "basin_name": "ASSAM_ARAKAN",
+      "point": [94.925, 27.195],
+      "formations": [
+        {"id": "siwalik_dhekiajuli", "interval_id": "MOR-INT-DHEK", "top_m": 0, "base_m": 780},
+        {"id": "girujan", "interval_id": "MOR-INT-GIRU", "top_m": 780, "base_m": 1820},
+        {"id": "tipam", "interval_id": "MOR-INT-TIPAM", "top_m": 1820, "base_m": 2540},
+        {"id": "barail", "interval_id": "MOR-INT-BARAIL", "top_m": 2540, "base_m": 3280},
+        {"id": "kopili", "interval_id": "MOR-INT-KOPILI", "top_m": 3280, "base_m": 3680},
+        {"id": "sylhet", "interval_id": "MOR-INT-SYLHET", "top_m": 3680, "base_m": 3920}
+      ],
+      "survey": [
+        {"md_m": 0, "tvd_m": 0},
+        {"md_m": 1820, "tvd_m": 1815},
+        {"md_m": 2540, "tvd_m": 2520},
+        {"md_m": 3280, "tvd_m": 3230},
+        {"md_m": 3920, "tvd_m": 3810}
+      ]
+    },
+    {
+      "id": "DGB-108",
+      "wellbore_id": "DGB-108-MAIN",
+      "name": "Digboi DGB-108 (Mature Field)",
+      "basin_name": "ASSAM_ARAKAN",
+      "point": [95.628, 27.382],
+      "formations": [
+        {"id": "tipam", "interval_id": "DGB-INT-TIPAM", "top_m": 120, "base_m": 1450},
+        {"id": "barail", "interval_id": "DGB-INT-BARAIL", "top_m": 1450, "base_m": 2450}
+      ],
+      "survey": [
+        {"md_m": 0, "tvd_m": 0},
+        {"md_m": 1200, "tvd_m": 1195},
+        {"md_m": 2450, "tvd_m": 2410}
+      ]
+    },
+    {
+      "id": "BGJ-015",
+      "wellbore_id": "BGJ-015-MAIN",
+      "name": "Baghjan BGJ-015 (High Pressure Gas)",
+      "basin_name": "ASSAM_ARAKAN",
+      "point": [95.395, 27.585],
+      "formations": [
+        {"id": "siwalik_dhekiajuli", "interval_id": "BGJ-INT-DHEK", "top_m": 0, "base_m": 850},
+        {"id": "girujan", "interval_id": "BGJ-INT-GIRU", "top_m": 850, "base_m": 2050},
+        {"id": "tipam", "interval_id": "BGJ-INT-TIPAM", "top_m": 2050, "base_m": 2820},
+        {"id": "barail", "interval_id": "BGJ-INT-BARAIL", "top_m": 2820, "base_m": 3880}
+      ],
+      "survey": [
+        {"md_m": 0, "tvd_m": 0},
+        {"md_m": 2050, "tvd_m": 2030},
+        {"md_m": 2820, "tvd_m": 2770},
+        {"md_m": 3880, "tvd_m": 3760}
+      ]
+    },
+    {
+      "id": "KSJ-004",
+      "wellbore_id": "KSJ-004-MAIN",
+      "name": "Kusijan KSJ-004 (Development)",
+      "basin_name": "ASSAM_ARAKAN",
+      "point": [95.545, 27.525],
+      "formations": [
+        {"id": "siwalik_dhekiajuli", "interval_id": "KSJ-INT-DHEK", "top_m": 0, "base_m": 810},
+        {"id": "girujan", "interval_id": "KSJ-INT-GIRU", "top_m": 810, "base_m": 1920},
+        {"id": "tipam", "interval_id": "KSJ-INT-TIPAM", "top_m": 1920, "base_m": 2690},
+        {"id": "barail", "interval_id": "KSJ-INT-BARAIL", "top_m": 2690, "base_m": 3550}
+      ],
+      "survey": [
+        {"md_m": 0, "tvd_m": 0},
+        {"md_m": 1920, "tvd_m": 1890},
+        {"md_m": 2690, "tvd_m": 2620},
+        {"md_m": 3550, "tvd_m": 3410}
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "OIL-WCR-NHK-302",
+      "wellbore_id": "NHK-302-MAIN",
+      "data_kind": "synthetic",
+      "pages": [
+        {
+          "page_number": 1,
+          "section_label": "Well Summary & Geology",
+          "text": "WELL COMPLETION REPORT: NHK-302. Field: Nahorkatiya, Upper Assam. Operator: Oil India Limited. Spud Date: 12-Jan-2024. Total Depth: 3650 m MD / 3420 m TVD in Kopili Formation. Casing record: 20 inch conductor at 85 m, 13-3/8 inch surface casing at 810 m in Dhekiajuli, 9-5/8 inch intermediate casing at 2675 m in Lower Tipam, 7 inch production liner to 3648 m."
+        },
+        {
+          "page_number": 2,
+          "section_label": "Drilling Incidents & Mud Loss",
+          "text": "At depth 2145 m MD to 2160 m MD in Tipam Sandstone, encountered severe partial to total mud losses of 45 bbl/hr. Mud weight in use was 1.22 SG (10.2 ppg) polymer bentonite mud. Pumped 25 bbl high-viscosity Mica and nut-plug LCM pill. Reduced flow rate from 2100 L/min to 1650 L/min and lowered mud density to 1.18 SG. Regained full returns after 14 hours NPT."
+        },
+        {
+          "page_number": 3,
+          "section_label": "Kopili Section & Sticking",
+          "text": "At depth 3482 m MD while drilling Kopili splintery shale, observed sudden torque spikes and tight hole during connection. Pipe differentially stuck with string off bottom. Pumped 30 bbl diesel-surfactant spotting fluid and jarred downwards with 65 klb force for 4.5 hours. String freed; conditioned mud weight to 1.28 SG to stabilize sloughing shale."
+        }
+      ]
+    },
+    {
+      "id": "OIL-WCR-MOR-045",
+      "wellbore_id": "MOR-045-MAIN",
+      "data_kind": "synthetic",
+      "pages": [
+        {
+          "page_number": 1,
+          "section_label": "Operations & Lost Circulation",
+          "text": "WELL DRILLING SUMMARY: MOR-045. Field: Moran. Total depth 3920 m MD in Sylhet Limestone. At depth 2030 m MD in Upper Tipam Sandstone, experienced sudden lost circulation with pit volume loss of 62 bbl. Mixed and pumped 30 bbl calcium carbonate and walnut shell LCM pill. Standpipe pressure stabilized at 2400 psi after sealing thief zone."
+        },
+        {
+          "page_number": 2,
+          "section_label": "Barail Gas Kick",
+          "text": "At depth 2985 m MD in Barail Arenaceous coal-sand sequence, observed 18 bbl pit gain and positive flow check after 0.5 m drilling break. Shut in well on annular preventer (SIDPP 380 psi, SICP 520 psi). Circulated out gas influx using Driller's Method; increased mud weight from 1.20 SG to 1.26 SG."
+        }
+      ]
+    },
+    {
+      "id": "OIL-WCR-BGJ-015",
+      "wellbore_id": "BGJ-015-MAIN",
+      "data_kind": "synthetic",
+      "pages": [
+        {
+          "page_number": 1,
+          "section_label": "High Pressure Barail Drilling",
+          "text": "DRILLING LOG: BGJ-015. Field: Baghjan, Tinsukia. Target: Barail main sand at 3710 m MD. Well drilled with 1.35 SG synthetic oil-based mud due to reactive Girujan clays and high-pressure Barail gas sand. Continuous monitoring of background gas and flow line temperature maintained. Mud losses observed in fractured Tipam sands at 2310 m MD (35 bbl loss), cured with medium nut-plug pill."
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "wellbore_id": "NHK-302-MAIN",
+      "event_type": "mud_loss",
+      "formation_code": "tipam",
+      "start_md_m": 2145.0,
+      "end_md_m": 2160.0,
+      "description": "Severe partial to total lost circulation in Tipam Sandstone; 45 bbl/hr losses cured with Mica/nut-plug LCM pill.",
+      "quote": "At depth 2145 m MD to 2160 m MD in Tipam Sandstone, encountered severe partial to total mud losses of 45 bbl/hr.",
+      "document_id": "OIL-WCR-NHK-302",
+      "page_number": 2
+    },
+    {
+      "wellbore_id": "NHK-302-MAIN",
+      "event_type": "stuck_pipe",
+      "formation_code": "kopili",
+      "start_md_m": 3482.0,
+      "end_md_m": 3488.0,
+      "description": "Differential sticking in splintery Kopili shale during pipe connection; freed with spotting fluid and jarring.",
+      "quote": "At depth 3482 m MD while drilling Kopili splintery shale, observed sudden torque spikes and tight hole during connection. Pipe differentially stuck.",
+      "document_id": "OIL-WCR-NHK-302",
+      "page_number": 3
+    },
+    {
+      "wellbore_id": "MOR-045-MAIN",
+      "event_type": "mud_loss",
+      "formation_code": "tipam",
+      "start_md_m": 2030.0,
+      "end_md_m": 2045.0,
+      "description": "Lost circulation in Upper Tipam Sandstone (62 bbl pit volume drop); sealed with CaCO3 and walnut LCM pill.",
+      "quote": "At depth 2030 m MD in Upper Tipam Sandstone, experienced sudden lost circulation with pit volume loss of 62 bbl.",
+      "document_id": "OIL-WCR-MOR-045",
+      "page_number": 1
+    },
+    {
+      "wellbore_id": "MOR-045-MAIN",
+      "event_type": "kick",
+      "formation_code": "barail",
+      "start_md_m": 2985.0,
+      "end_md_m": 2990.0,
+      "description": "Gas influx and 18 bbl pit gain in Barail coal sequence; killed using Driller's Method with 1.26 SG mud.",
+      "quote": "At depth 2985 m MD in Barail Arenaceous coal-sand sequence, observed 18 bbl pit gain and positive flow check after 0.5 m drilling break.",
+      "document_id": "OIL-WCR-MOR-045",
+      "page_number": 2
+    },
+    {
+      "wellbore_id": "BGJ-015-MAIN",
+      "event_type": "mud_loss",
+      "formation_code": "tipam",
+      "start_md_m": 2310.0,
+      "end_md_m": 2320.0,
+      "description": "Mud losses in fractured Tipam sands (35 bbl loss) cured with medium nut-plug pill.",
+      "quote": "Mud losses observed in fractured Tipam sands at 2310 m MD (35 bbl loss), cured with medium nut-plug pill.",
+      "document_id": "OIL-WCR-BGJ-015",
+      "page_number": 1
+    }
+  ]
+}
