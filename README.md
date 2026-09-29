@@ -76,32 +76,66 @@ Four roles — Viewer, Engineer, Reviewer, Admin — with token-based authentica
 
 ## 🏗️ Architecture
 
-```
-        ┌──────────────────────────────────────────────────────┐
-        │              React 19 + TypeScript UI                │
-        │  Intelligence · Operations · Prediction · Documents  │
-        │  Offset Brief · Voice Memo · Report Facts · Search   │
-        └───────────────────────┬──────────────────────────────┘
-                                │  HTTPS / WebSocket  /api/v1/
-        ┌───────────────────────▼──────────────────────────────┐
-        │                FastAPI  (uvicorn)                     │
-        │   Auth · Wells · Alerts · Intelligence · Prediction   │
-        │   Ingestion · Report-Facts · Telemetry · Voice        │
-        └───────┬──────────────────────────────┬───────────────┘
-                │                              │
- ┌──────────────▼──────────┐   ┌──────────────▼───────────────┐
- │   PostgreSQL 17          │   │      Document Storage         │
- │   + PostGIS 3.6          │   │   (PDF pages, audio memos,   │
- │   + pgvector 0.8         │   │    model checkpoints)         │
- └───────────┬─────────────┘   └──────────────────────────────┘
-             │
- ┌───────────┴──────────────────────────────────┐
- │            Background Workers                 │
- │  Ingestion Worker    Telemetry / Replay       │
- │  OCR · NLP · LLM     Worker (WITSML)          │
- │  Prediction Worker   Alert Engine             │
- │  (model inference)   (rule evaluation)        │
- └──────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UI ["🖥️  React 19 + TypeScript Frontend"]
+        direction LR
+        INT["🗺️ Intelligence\nNearby-well map"] 
+        OPS["⚡ Operations\nLive alerts"]
+        PRED["📊 Prediction\nRisk models"]
+        DOCS["📄 Documents\nIngestion & review"]
+        RF["🔎 Report Facts\nCited QA"]
+        OB["📋 Offset Brief\nPre-spud summary"]
+        VM["🎙️ Voice Memos"]
+    end
+
+    subgraph API ["⚙️  FastAPI + uvicorn  —  port 8000"]
+        direction LR
+        AUTH["Auth &amp; Roles"]
+        WELLS["Wells &amp; Wellbores"]
+        ALERTS["Alert Engine"]
+        INTEL["Intelligence"]
+        INGEST["Ingestion API"]
+        RPRED["Prediction"]
+        VOICE["Voice"]
+    end
+
+    subgraph DB ["🗄️  PostgreSQL 17"]
+        PG[("Core tables")]
+        GIS(["PostGIS 3.6\nGeospatial"])
+        VEC(["pgvector 0.8\nSemantic"])
+    end
+
+    subgraph STORE ["📁  Document Storage"]
+        FS["PDF pages\nAudio memos\nModel checkpoints"]
+    end
+
+    subgraph WORKERS ["🔧  Background Workers"]
+        IW["Ingestion Worker\nOCR · NLP · LLM"]
+        TW["Telemetry Worker\nWITSML / eRTMAC"]
+        PW["Prediction Worker\nModel inference"]
+        AE["Alert Engine\nRule evaluation"]
+    end
+
+    ERTMAC(["📡 eRTMAC\nWITSML Live Feed"])
+
+    UI -- "HTTPS / WebSocket /api/v1/" --> API
+    API --> DB
+    API --> STORE
+    API --> WORKERS
+    ERTMAC -- "WITSML adapter" --> TW
+    TW --> DB
+    IW --> STORE
+    IW --> DB
+    AE --> DB
+    PW --> DB
+
+    style UI fill:#0d1b2a,stroke:#1e90ff,color:#e0f0ff
+    style API fill:#0a2240,stroke:#00c4ff,color:#e0f0ff
+    style DB fill:#0a1f0a,stroke:#00cc66,color:#e0f0ff
+    style STORE fill:#1a1a0d,stroke:#ffaa00,color:#e0f0ff
+    style WORKERS fill:#1a0d1a,stroke:#cc44ff,color:#e0f0ff
+    style ERTMAC fill:#1f0d0d,stroke:#ff4444,color:#ffffff
 ```
 
 ### Design Principles
@@ -111,6 +145,376 @@ Four roles — Viewer, Engineer, Reviewer, Admin — with token-based authentica
 - **Deterministic alert path.** The alert engine is a rule evaluator, not a neural network. It cannot hallucinate. Every fired alert has an auditable evidence chain.
 - **Complete provenance.** Every intelligence claim links back to dataset → document → page → passage → reviewer → timestamp. The provenance chain is queryable and exportable.
 - **Separation of concerns.** Prediction (probabilistic, ML) and alerting (deterministic, rule-based) are architecturally separate. A failed or uncalibrated model cannot silence a deterministic alert.
+
+---
+
+## 📊 Diagrams
+
+### Document Ingestion Pipeline
+
+```mermaid
+flowchart LR
+    A(["📄 Raw Document\nPDF / Scanned / Audio"]) --> B["Upload API\n/api/v1/documents"]
+    B --> C{"Document\nType?"}
+    C -- "Text PDF" --> D["Text Extraction\npdfplumber"]
+    C -- "Scanned / Image PDF" --> E["OCR Engine\nTesseract / cloud"]
+    C -- "Audio" --> F["Local Whisper ASR\n(no cloud)"]    
+    D --> G["Page Segmentation\n& Cleaning"]
+    E --> G
+    F --> H["Transcript\nStorage"]
+    G --> I{"Extraction\nProvider?"}
+    I -- "local_rules" --> J["Regex + Heuristics\nExtractor"]
+    I -- "openai_compatible" --> K["LLM Structured\nExtraction"]
+    J --> L["Event Candidates\n(unverified)"]  
+    K --> L
+    L --> M["🧑‍⚖️ Review Queue\nHuman-in-the-loop"]
+    M -- "Approved" --> N[("Approved Facts\nDB")]
+    M -- "Rejected" --> O(["❌ Discarded"])
+    M -- "Corrected" --> P["Edited Claim"] --> N
+    N --> Q["Alert Engine\nEvaluation"]
+    N --> R["Semantic Index\npgvector"]
+
+    style A fill:#1a2a3a,stroke:#4488ff,color:#cce0ff
+    style M fill:#2a1a0a,stroke:#ffaa00,color:#ffe0cc
+    style N fill:#0a2a0a,stroke:#44cc44,color:#ccffcc
+    style Q fill:#2a0a2a,stroke:#cc44ff,color:#f0ccff
+```
+
+---
+
+### Proactive Alert — Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant ER as 📡 eRTMAC / Replay
+    participant TW as Telemetry Worker
+    participant DB as PostgreSQL
+    participant AE as Alert Engine
+    participant WS as WebSocket Server
+    participant UI as Engineer Dashboard
+
+    ER->>TW: WITSML snapshot (bit_depth, WOB, ECD, flow_rate)
+    TW->>DB: Upsert telemetry_snapshot
+    TW->>AE: Trigger evaluation (current_depth)
+    AE->>DB: Query approved hazard events\nwithin lookahead window (±150m)
+    DB-->>AE: Matched historical events\n(formation, severity, evidence)
+    AE->>DB: Check — alert already active?
+    alt New hazard detected
+        AE->>DB: INSERT alert (state=active, evidence_id, severity)
+        AE->>WS: Broadcast alert payload
+        WS->>UI: Push alert card (severity, formation,\ncited passage, mitigation)
+        UI->>UI: Render alert banner with\nevidence link
+    else Alert already active
+        AE->>DB: Update snapshot_count
+    end
+    Note over UI: Engineer reviews cited evidence
+    UI->>DB: POST /alerts/{id}/actions (acknowledge)
+    UI->>DB: POST /alerts/{id}/feedback (action_taken, outcome)
+    DB->>DB: Append to decision ledger\n(auditable, timestamped)
+```
+
+---
+
+### Database Entity-Relationship Model
+
+```mermaid
+erDiagram
+    DATASET {
+        uuid id PK
+        string external_id
+        string name
+        string kind
+        string qualification_status
+        string origin_kind
+        string authorization_state
+    }
+    WELL {
+        uuid id PK
+        uuid dataset_id FK
+        string external_id
+        string name
+        string basin_name
+        string status
+        geography surface_point
+    }
+    WELLBORE {
+        uuid id PK
+        uuid well_id FK
+        string external_id
+        string name
+    }
+    FORMATION {
+        uuid id PK
+        string basin_name
+        string canonical_code
+        string display_name
+    }
+    DOCUMENT {
+        uuid id PK
+        uuid dataset_id FK
+        string filename
+        string status
+        string extraction_provider
+        integer page_count
+        timestamp ingested_at
+    }
+    DRILLING_EVENT {
+        uuid id PK
+        uuid document_id FK
+        uuid wellbore_id FK
+        uuid formation_id FK
+        string event_type
+        float depth_md_m
+        float depth_tvd_m
+        string severity
+        string description
+        string review_state
+    }
+    PASSAGE {
+        uuid id PK
+        uuid document_id FK
+        integer page_number
+        string quote_text
+        vector embedding
+    }
+    ALERT {
+        uuid id PK
+        uuid drilling_event_id FK
+        uuid passage_id FK
+        string state
+        string severity
+        float triggered_at_depth_m
+        timestamp created_at
+    }
+    ALERT_ACTION {
+        uuid id PK
+        uuid alert_id FK
+        uuid principal_id FK
+        string action_type
+        string outcome
+        timestamp recorded_at
+    }
+    APP_USER {
+        uuid id PK
+        string username
+        string role
+        string token_hash
+        boolean active
+    }
+    REPLAY_SESSION {
+        uuid id PK
+        string state
+        integer revision
+        string source_mode
+    }
+
+    DATASET ||--o{ WELL : "contains"
+    WELL ||--o{ WELLBORE : "has"
+    DATASET ||--o{ DOCUMENT : "owns"
+    DOCUMENT ||--o{ DRILLING_EVENT : "yields"
+    DOCUMENT ||--o{ PASSAGE : "has pages"
+    WELLBORE ||--o{ DRILLING_EVENT : "recorded at"
+    FORMATION ||--o{ DRILLING_EVENT : "within"
+    DRILLING_EVENT ||--o{ ALERT : "triggers"
+    PASSAGE ||--o{ ALERT : "cites"
+    ALERT ||--o{ ALERT_ACTION : "lifecycle"
+    APP_USER ||--o{ ALERT_ACTION : "performed by"
+```
+
+---
+
+### Role-Based User Journey
+
+```mermaid
+flowchart TD
+    START(["🔑 Sign In with Token"]) --> ROLE{"Role?"}
+
+    ROLE -- "Viewer" --> V1["View Intelligence Map"]
+    V1 --> V2["Browse Nearby Wells"]
+    V2 --> V3["Read Approved Alerts"]
+    V3 --> V4["Search Report Facts"]
+
+    ROLE -- "Engineer" --> E1["View Intelligence + Operations"]
+    E1 --> E2["Monitor Live Telemetry"]
+    E2 --> E3["Receive Proactive Alerts"]
+    E3 --> E4["Acknowledge + Act on Alerts"]
+    E4 --> E5["Submit Engineering Feedback"]
+    E5 --> E6["Record Voice Memo"]
+    E6 --> E7["View Offset Brief + Prediction"]
+
+    ROLE -- "Reviewer" --> R1["Open Document Queue"]
+    R1 --> R2["Upload Drilling Reports"]
+    R2 --> R3["Review Extracted Events"]
+    R3 --> R4{"Decision"}
+    R4 -- "Approve" --> R5["Event enters\nAlert Engine"]
+    R4 -- "Correct" --> R3
+    R4 -- "Reject" --> R6["Event discarded"]
+    R3 --> R7["Run Public Benchmark\nEvaluation"]
+
+    ROLE -- "Admin" --> A1["All Engineer + Reviewer capabilities"]
+    A1 --> A2["Load Fixture Datasets"]
+    A2 --> A3["Manage Users + Roles"]
+    A3 --> A4["Approve ML Models"]
+    A4 --> A5["View System Status"]
+    A5 --> A6["Configure eRTMAC Sources"]
+
+    style START fill:#0d1b2a,stroke:#4488ff,color:#cce0ff
+    style ROLE fill:#1a1a2a,stroke:#8888ff,color:#e0e0ff
+    style R5 fill:#0a2a0a,stroke:#44cc44,color:#ccffcc
+    style R6 fill:#2a0a0a,stroke:#cc4444,color:#ffcccc
+    style E3 fill:#2a0a2a,stroke:#cc44ff,color:#f0ccff
+```
+
+---
+
+### Formation Correlation Algorithm
+
+```mermaid
+flowchart TD
+    A(["Active Well\nCurrent Bit Depth D"]) --> B["Fetch Formation Tops\nfor Active Well"]
+    B --> C["Identify Current\nFormation Interval"]
+    C --> D["Query Nearby Wellbores\nwithin radius R"]
+    D --> E["For each offset wellbore:"]
+    E --> F["Load approved\nDrilling Events"]
+    F --> G["MD → TVD conversion\nusing trajectory survey"]
+    G --> H["Map event TVD to\nformation name"]
+    H --> I["Project formation\nonto active well TVD space"]
+    I --> J{"Event depth within\nlookahead window\n[D, D + 150m]?"}
+    J -- "Yes" --> K["Score hazard:\nformation match +\nproximit + severity"]
+    J -- "No" --> L["Queue for future\ndepth evaluation"]
+    K --> M{"Alert already\nactive for this event?"}
+    M -- "No" --> N["🚨 Fire Alert\n+ cite evidence passage"]
+    M -- "Yes" --> O["Update snapshot count"]
+    N --> P["WebSocket broadcast\nto Engineer UI"]
+    P --> Q(["Engineer receives\nproactive alert"])
+
+    style A fill:#0a1f3a,stroke:#4488ff,color:#cce0ff
+    style N fill:#2a0a0a,stroke:#ff4444,color:#ffcccc
+    style Q fill:#0a2a0a,stroke:#44cc88,color:#ccffee
+    style J fill:#1a1a0a,stroke:#ffaa00,color:#fff0cc
+    style M fill:#1a0a1a,stroke:#cc44ff,color:#f0ccff
+```
+
+---
+
+### Replay Session State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> created : POST /replay-sessions\n(Idempotency-Key)
+    created --> paused : Session initialised
+    paused --> playing : control: play
+    playing --> paused : control: pause
+    playing --> playing : Telemetry tick\n(every 2s)
+    playing --> alert_fired : Hazard depth\nenters lookahead window
+    alert_fired --> playing : Engineer acknowledges
+    playing --> completed : All depth ticks\nconsumed
+    paused --> reset : control: reset
+    reset --> paused : State cleared
+    completed --> [*]
+
+    note right of playing
+        WebSocket streams snapshots:
+        bit_depth, WOB, RPM,
+        ECD, flow_rate, pit_vol
+    end note
+
+    note right of alert_fired
+        Alert payload contains:
+        formation, severity,
+        cited passage, mitigation
+    end note
+```
+
+---
+
+### ML Risk Model Pipeline
+
+```mermaid
+flowchart LR
+    subgraph DATA ["📦 Training Data"]
+        WD["Historical Well\nDrilling Parameters"]
+        EV["Approved Drilling\nEvents (labelled)"]  
+        FT["Formation Tops\n& Lithology"]
+    end
+
+    subgraph FEAT ["🔬 Feature Engineering"]
+        F1["ECD at formation top"]
+        F2["ROP anomaly vs offset average"]
+        F3["d-exponent trend"]
+        F4["Formation clay content"]
+        F5["Wellbore inclination"]
+    end
+
+    subgraph MODELS ["🤖 ML Models"]
+        M1["Mud-loss classifier\nGradient Boosting"]
+        M2["Pore pressure\ntrend model"]
+        M3["Stuck-pipe\nrisk index"]
+        M4["Cementing risk\nlogistic regression"]
+        M5["Torque anomaly\ndetector"]
+    end
+
+    subgraph GATE ["🔐 Qualification Gate"]
+        QG{"Calibration data\ndensity sufficient?"}
+        APPROVE["Admin approves\nmodel for production"]
+        HOLD["Model held —\nnot surfaced to engineers"]
+    end
+
+    subgraph OUTPUT ["📊 Risk Output"]
+        CURVE["Probability curve\nvs depth"]
+        CARD["Risk card in\nPrediction view"]
+        FEED["Engineer feedback\n→ retraining loop"]
+    end
+
+    DATA --> FEAT
+    FEAT --> MODELS
+    MODELS --> GATE
+    QG -- "Yes" --> APPROVE --> OUTPUT
+    QG -- "No" --> HOLD
+    FEED --> DATA
+
+    style GATE fill:#1a1a0a,stroke:#ffaa00,color:#fff0cc
+    style APPROVE fill:#0a2a0a,stroke:#44cc44,color:#ccffcc
+    style HOLD fill:#2a0a0a,stroke:#cc4444,color:#ffcccc
+    style MODELS fill:#0a1a2a,stroke:#4488ff,color:#cce0ff
+```
+
+---
+
+### Project Phases — Gantt Chart
+
+```mermaid
+gantt
+    title NWIS Development Timeline — SIH 2026
+    dateFormat  YYYY-MM-DD
+    section Foundation
+    Architecture and Data Contracts     :done,    p0, 2026-08-01, 5d
+    Schema, Auth, Well CRUD, Proximity  :done,    p1, after p0, 7d
+    section Ingestion
+    Document Pipeline, OCR, Review Queue :done,   p2, after p1, 7d
+    section Intelligence
+    Formation Correlation, Analogue Rank :done,   p3, after p2, 7d
+    Semantic Search and pgvector         :done,   p3b, after p2, 7d
+    section Operations
+    WebSocket Replay, Alert Engine       :done,   p4, after p3, 6d
+    Lifecycle Actions, Feedback          :done,   p4b, after p3, 6d
+    section Prediction
+    Mud-loss Classifier                  :done,   p5a, after p4, 5d
+    Pressure Window Model                :done,   p5b, after p4, 5d
+    Qualification Gate                   :done,   p5c, after p5a, 3d
+    section Hardening
+    Public Benchmark Evaluation          :done,   p6, after p5c, 5d
+    Rehearsal and Telemetry Dossier      :done,   p6b, after p5c, 5d
+    section Extra Features
+    Decision Ledger, Provenance          :done,   p7a, after p6, 4d
+    Report Facts QA, Offset Brief        :done,   p7b, after p6, 4d
+    Voice Memos and ASR                  :done,   p7c, after p7a, 3d
+    section Production
+    eRTMAC Live Integration              :active, p8a, 2026-09-30, 14d
+    Model Retraining Pipeline            :        p8b, after p8a, 10d
+    OIL Site Deployment                  :        p8c, after p8b, 7d
+```
 
 ---
 
