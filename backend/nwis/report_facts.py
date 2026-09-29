@@ -289,3 +289,17 @@ def ask_fact(body: AskFact, _principal=Depends(current_principal)):
         "reason": None,
         "answer_kind": "reviewer_curated_fact",
     }
+
+
+class RagQueryRequest(BaseModel):
+    dataset_id: UUID
+    question: str = Field(min_length=2, max_length=500)
+    wellbore_id: UUID | None = None
+
+
+@router.post("/query-rag")
+def ask_rag_endpoint(body: RagQueryRequest, _principal=Depends(current_principal)):
+    with connection() as conn:
+        from nwis.rag_engine import query_rag_engine
+        return query_rag_engine(conn, body.dataset_id, body.question, body.wellbore_id)
+
