@@ -182,11 +182,32 @@ function Landing({
   error: string;
 }) {
   const [token, setToken] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [roleError, setRoleError] = useState("");
 
   function submit(e: FormEvent) {
     e.preventDefault();
     onConnect(token.trim());
     setToken("");
+  }
+
+  async function handleRoleLogin(role: string) {
+    setLoginBusy(true);
+    setRoleError("");
+    try {
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? data.error?.message ?? "Login failed");
+      onConnect(data.token);
+    } catch (err: any) {
+      setRoleError(err.message ?? "Role connection failed");
+    } finally {
+      setLoginBusy(false);
+    }
   }
 
   const depthTicks = [
@@ -196,6 +217,13 @@ function Landing({
     { depth: "2,141 m", major: true },
     { depth: "2,200 m", major: false },
     { depth: "2,300 m", major: false },
+  ];
+
+  const ROLES = [
+    { id: "engineer", title: "Drilling Operations Engineer", badge: "Live Ops", desc: "Telemetry monitoring, voice memos & hazard simulation" },
+    { id: "reviewer", title: "Wellsite Verification Reviewer", badge: "Evidence Audit", desc: "Inspect source passages, verify & approve historical claims" },
+    { id: "viewer", title: "Read-Only Viewer", badge: "Observer", desc: "View approved claims, offset briefs & nearby well logs" },
+    { id: "admin", title: "Observatory Admin", badge: "Supervisory", desc: "ML model approvals, dataset seeding & retention policies" },
   ];
 
   return (
@@ -248,29 +276,66 @@ function Landing({
             </div>
           </div>
 
-          <h2 className="auth-title">Connect to platform</h2>
+          <h2 className="auth-title">Select Operational Role</h2>
           <p className="auth-desc">
-            Enter your local access token to connect. Reviewers can inspect
-            source pages and approve evidence; viewers see approved claims.
-            Your token stays in memory only.
+            Sign in with an authenticated role credential or enter your local bearer token.
           </p>
 
-          {error && (
+          {(error || roleError) && (
             <div className="error-msg" role="alert">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="8" cy="8" r="7" />
                 <path d="M8 5v3.5M8 11v.5" strokeLinecap="round" />
               </svg>
-              {error}
+              {error || roleError}
             </div>
           )}
 
+          {/* Quick Role Selection Buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+            {ROLES.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="secondary"
+                disabled={loading || loginBusy}
+                onClick={() => handleRoleLogin(r.id)}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  textAlign: "left",
+                  padding: "10px 14px",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--border)",
+                  background: "var(--slate-dark)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                  <strong style={{ fontSize: "0.84rem", color: "var(--text-primary)" }}>{r.title}</strong>
+                  <span style={{ fontSize: "0.68rem", padding: "2px 6px", borderRadius: "3px", background: "var(--basin)", color: "var(--teal-glow)", fontFamily: "var(--font-mono)" }}>
+                    {r.badge}
+                  </span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "3px" }}>
+                  {r.desc}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "10px 0" }}>
+            <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>or enter custom token</span>
+            <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+          </div>
+
           <div className="field">
-            <label className="field-label" htmlFor="access-token">Local access token</label>
+            <label className="field-label" htmlFor="access-token">Custom access token</label>
             <input
               id="access-token"
               type="password"
-              required
               minLength={16}
               value={token}
               onChange={(e) => setToken(e.target.value)}
@@ -283,14 +348,13 @@ function Landing({
             className="btn btn-primary btn-full"
             type="submit"
             id="connect-btn"
-            disabled={loading || token.length < 16}
+            disabled={loading || loginBusy || token.length < 16}
           >
-            {loading ? "Connecting…" : "Connect to NWIS"}
+            {loading || loginBusy ? "Connecting…" : "Connect with Token →"}
           </button>
 
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "14px", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
-            SIMULATED · Synthetic demo rehearsal. No trained risk model or live eRTMAC.
-            Synthetic examples establish behavior, not predictive accuracy.
+            OIL Subsurface Observatory · Role-Based Access Control · Source-audited evidence pipeline.
           </p>
         </form>
       </div>
