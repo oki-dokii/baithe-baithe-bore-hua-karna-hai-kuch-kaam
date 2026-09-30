@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./india-map.css";
 import { CasingAndMudPanel, DepthTrack, MudWindow, PlanningPanel, PlanningPoint, ReservoirPropertiesPanel } from "./ExplorationExtras";
