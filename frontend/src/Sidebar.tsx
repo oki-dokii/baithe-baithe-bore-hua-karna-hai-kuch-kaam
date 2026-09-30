@@ -17,6 +17,7 @@ interface SidebarProps {
   status: Status;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onStartTour: () => void;
 }
 
 export function StateBadge({ state }: { state: string }) {
@@ -25,7 +26,7 @@ export function StateBadge({ state }: { state: string }) {
 }
 
 export default function Sidebar({
-  view, setView, disconnect, well, status, collapsed, onToggleCollapse,
+  view, setView, disconnect, well, status, collapsed, onToggleCollapse, onStartTour,
 }: SidebarProps) {
   const isSynthetic = status.source_mode === "SYNTHETIC";
 
@@ -79,7 +80,7 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-bottom">
-        <button className="nav-item nav-item-muted" onClick={() => {}} title="Take a tour of NWIS" aria-label="Take a tour of NWIS">
+        <button className="nav-item nav-item-muted" onClick={onStartTour} title="Take a tour of NWIS" aria-label="Take a tour of NWIS">
           <span className="nav-item-icon"><IconHelp /></span>
           <span className="nav-item-text">
             <span className="nav-item-label"><span className="nav-item-name">Take a tour</span></span>

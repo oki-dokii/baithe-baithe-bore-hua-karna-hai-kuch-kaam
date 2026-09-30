@@ -5,7 +5,7 @@
 import { FormEvent, useState } from "react";
 
 interface LandingProps {
-  onConnect: (token: string) => void;
+  onConnect: (token: string, role?: string) => void;
   loading: boolean;
   error: string;
 }
@@ -33,7 +33,12 @@ export default function Landing({ onConnect, loading, error }: LandingProps) {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    onConnect(token.trim());
+    const t = token.trim();
+    let detectedRole = "engineer";
+    if (t.includes("admin")) detectedRole = "admin";
+    else if (t.includes("reviewer")) detectedRole = "reviewer";
+    else if (t.includes("viewer")) detectedRole = "viewer";
+    onConnect(t, detectedRole);
     setToken("");
   }
 
@@ -48,7 +53,7 @@ export default function Landing({ onConnect, loading, error }: LandingProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? data.error?.message ?? "Login failed");
-      onConnect(data.token);
+      onConnect(data.token, role);
     } catch (err: any) {
       setRoleError(err.message ?? "Role connection failed");
     } finally {

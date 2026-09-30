@@ -15,6 +15,7 @@ interface MobileDrawerProps {
   status: Status;
   open: boolean;
   onClose: () => void;
+  onStartTour: () => void;
 }
 
 export default function MobileDrawer({
@@ -25,6 +26,7 @@ export default function MobileDrawer({
   status,
   open,
   onClose,
+  onStartTour,
 }: MobileDrawerProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const isSynthetic = status.source_mode === "SYNTHETIC";
@@ -118,7 +120,7 @@ export default function MobileDrawer({
         <div className="sidebar-bottom">
           <button
             className="nav-item nav-item-muted"
-            onClick={onClose}
+            onClick={() => { onClose(); onStartTour(); }}
             aria-label="Take a tour of NWIS"
           >
             <span className="nav-item-icon"><IconHelp /></span>

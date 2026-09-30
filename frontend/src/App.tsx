@@ -8,6 +8,9 @@ import Sidebar from "./Sidebar";
 import MobileDrawer from "./MobileDrawer";
 import ContextBar from "./ContextBar";
 import FoundationView from "./FoundationView";
+import { ProductTour, isTourDone, TOUR_STEPS } from "./ProductTour";
+import DevConsole from "./DevConsole";
+import { UserRole } from "./roles";
 import { Component, Status, Well, WellPage } from "./types";
 import { View } from "./nav";
 import "./styles.css";
@@ -32,6 +35,7 @@ async function getJson<T>(path: string, token: string): Promise<T> {
 
 export default function App() {
   const [token, setEntered] = useState("");
+  const [activeRole, setActiveRole] = useState<UserRole>("engineer");
   const [status, setStatus] = useState<Status | null>(null);
   const [wells, setWells] = useState<Well[]>([]);
   const [selected, setSelected] = useState("");
@@ -42,6 +46,8 @@ export default function App() {
   const [view, setView] = useState<View>("operations");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
 
   useEffect(() => {
     if (!token) return;
@@ -85,21 +91,85 @@ export default function App() {
     };
   }, [token, selected, radius]);
 
+  useEffect(() => {
+    if (status && !isTourDone()) {
+      setTourStep(0);
+      setTourOpen(true);
+    }
+  }, [status]);
+
+  function handleTourNext() {
+    if (tourStep < TOUR_STEPS.length - 1) {
+      setTourStep((s) => s + 1);
+    } else {
+      try {
+        localStorage.setItem("nwis_tour_done", "1");
+      } catch {}
+      setTourOpen(false);
+    }
+  }
+
+  function handleTourBack() {
+    if (tourStep > 0) setTourStep((s) => s - 1);
+  }
+
+  function handleTourSkip() {
+    try {
+      localStorage.setItem("nwis_tour_done", "1");
+    } catch {}
+    setTourOpen(false);
+  }
+
+  function handleStartTour() {
+    setTourStep(0);
+    setTourOpen(true);
+  }
+
+  function handleResetTour() {
+    try {
+      localStorage.removeItem("nwis_tour_done");
+    } catch {}
+    setTourStep(0);
+    setTourOpen(true);
+  }
+
+  async function handleImpersonate(role: UserRole) {
+    try {
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: role === "superadmin" ? "admin" : role }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEntered(data.token);
+        setActiveRole(role);
+      }
+    } catch (err) {
+      console.error("Failed to impersonate role:", err);
+    }
+  }
+
   function disconnect() {
     setEntered("");
+    setActiveRole("engineer");
     setStatus(null);
     setWells([]);
     setNearby([]);
     setError("");
     setView("operations");
     setSidebarCollapsed(false);
+    setTourOpen(false);
   }
 
   // Not connected
   if (!status) {
     return (
       <Landing
-        onConnect={setEntered}
+        onConnect={(tok, role) => {
+          setEntered(tok);
+          if (role) setActiveRole(role as UserRole);
+        }}
         loading={loading}
         error={error}
       />
@@ -119,6 +189,7 @@ export default function App() {
         status={status}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        onStartTour={handleStartTour}
       />
 
       {/* Mobile drawer */}
@@ -130,6 +201,7 @@ export default function App() {
         status={status}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        onStartTour={handleStartTour}
       />
 
       {/* Main body */}
@@ -195,6 +267,20 @@ export default function App() {
           <span className="simulated-tag">SIH Prototype · Decision support, not operational instruction</span>
         </footer>
       </div>
+
+      <ProductTour
+        open={tourOpen}
+        step={tourStep}
+        onNext={handleTourNext}
+        onBack={handleTourBack}
+        onSkip={handleTourSkip}
+      />
+      <DevConsole
+        token={token}
+        activeRole={activeRole}
+        onImpersonate={handleImpersonate}
+        onResetTour={handleResetTour}
+      />
     </div>
   );
 }
