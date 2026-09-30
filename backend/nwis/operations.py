@@ -469,26 +469,27 @@ def snapshot(session_id: UUID, _principal=Depends(current_principal)):
 
         # Real calibrated ML Hazard Inference — Gap C
         risk_score = None
-        risk_reason = "baseline"
+        risk_reason = "model_not_available"
         hazard_prediction = None
-        try:
-            from nwis.hazard_model import predict_hazard
-            current_md = float(sample["md_m"]) if sample and sample.get("md_m") is not None else 2150.0
-            in_loss_zone = 2100.0 <= current_md <= 2350.0
-            features = {
-                "rop_m_per_h": 16.8 if in_loss_zone else 8.5,
-                "wob_kn": 49.0 if in_loss_zone else 38.0,
-                "rpm": 118.0 if in_loss_zone else 92.0,
-                "torque_kn_m": 11.5 if in_loss_zone else 6.8,
-                "flow_in_l_per_min": 1940.0 if in_loss_zone else 1720.0,
-                "mud_density_kg_per_m3": 1140.0 if in_loss_zone else 1195.0,
-            }
-            hazard_prediction = predict_hazard(features)
-            risk_score = hazard_prediction["probability"]
-            risk_reason = f"ml_calibrated_{hazard_prediction['risk_level'].lower()}"
-        except Exception as e:
-            risk_score = None
-            risk_reason = f"inference_error: {str(e)}"
+        if sample and sample.get("md_m") is not None:
+            try:
+                from nwis.hazard_model import predict_hazard
+                current_md = float(sample["md_m"])
+                in_loss_zone = 2100.0 <= current_md <= 2350.0
+                features = {
+                    "rop_m_per_h": 16.8 if in_loss_zone else 8.5,
+                    "wob_kn": 49.0 if in_loss_zone else 38.0,
+                    "rpm": 118.0 if in_loss_zone else 92.0,
+                    "torque_kn_m": 11.5 if in_loss_zone else 6.8,
+                    "flow_in_l_per_min": 1940.0 if in_loss_zone else 1720.0,
+                    "mud_density_kg_per_m3": 1140.0 if in_loss_zone else 1195.0,
+                }
+                hazard_prediction = predict_hazard(features)
+                risk_score = hazard_prediction["probability"]
+                risk_reason = f"ml_calibrated_{hazard_prediction['risk_level'].lower()}"
+            except Exception as e:
+                risk_score = None
+                risk_reason = f"inference_error: {str(e)}"
 
         return {
             "replay_worker_ready": bool(worker and worker["fresh"]),
