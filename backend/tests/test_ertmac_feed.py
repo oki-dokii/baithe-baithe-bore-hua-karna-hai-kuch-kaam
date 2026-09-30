@@ -1,5 +1,6 @@
 """Tests for eRTMAC and WITSML real-time streaming feed."""
 
+import os
 from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
@@ -100,8 +101,6 @@ def test_parse_witsml_security_rejections():
         parse_witsml_log_xml(evil_xml, default_wellbore_id=wellbore_id)
     assert "DTD/Entity declarations are rejected" in str(exc.value)
 
-
-import os
 
 @pytest.mark.skipif(os.getenv("NWIS_INTEGRATION") != "1", reason="Requires NWIS test database")
 def test_ertmac_feed_status_endpoint(configure_test_settings):

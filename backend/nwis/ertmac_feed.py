@@ -5,15 +5,14 @@ Implements Oil India Limited (OIL) problem statement:
 - Requirement vi: Real-time telemetry ingestion, monitoring, and proactive hazard prediction
 """
 
-import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from nwis.db import connection
