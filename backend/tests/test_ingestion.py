@@ -188,3 +188,27 @@ def test_provider_contract_and_bad_output(monkeypatch):
     monkeypatch.setattr(extract.httpx, "Client", Client)
     with pytest.raises(IngestionFailure, match="schema"):
         extract.extract_candidates("Untrusted source page", "synthetic")
+
+
+def test_extract_reservoir_properties():
+    text = (
+        "Core analysis in Barail Sandstone indicates average porosity of 18.5% between 1800 to 1850 m. "
+        "Air permeability measured 45 mD in the target pay interval from 1820 to 1840 m. "
+        "RFT measurements showed pore pressure of 10.2 ppg in the reservoir section."
+    )
+    candidates = extract.extract_reservoir_property_candidates(text)
+    assert len(candidates) == 3
+    types = {c.property_type: c for c in candidates}
+    assert "porosity" in types
+    assert types["porosity"].value == 18.5
+    assert types["porosity"].unit == "%"
+    assert types["porosity"].top_md_m == 1800
+    assert types["porosity"].base_md_m == 1850
+
+    assert "permeability" in types
+    assert types["permeability"].value == 45.0
+    assert types["permeability"].unit == "MD"
+
+    assert "pore_pressure" in types
+    assert types["pore_pressure"].value == 10.2
+    assert types["pore_pressure"].unit == "ppg"

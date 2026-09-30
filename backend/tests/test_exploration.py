@@ -7,7 +7,12 @@ from fastapi.testclient import TestClient
 
 from nwis.config import get_settings
 from nwis.db import connection
-from nwis.exploration import PlanningPoint
+from nwis.exploration import (
+    CasingProgramInput,
+    MudProgramInput,
+    PlanningPoint,
+    ReservoirPropertyInput,
+)
 from nwis.main import app
 from nwis.seed import load_fixture, stable_id
 
@@ -16,6 +21,60 @@ def test_planning_contract_rejects_reversed_and_nonfinite_depth():
     for extra in ({"min_md_m": 2000, "max_md_m": 1000}, {"longitude": float("nan")}):
         with pytest.raises(ValueError):
             PlanningPoint(dataset_id=uuid4(), **{"latitude": 27, "longitude": 95, **extra})
+
+
+def test_casing_mud_reservoir_input_validation():
+    # Valid casing input
+    casing = CasingProgramInput(
+        hole_diameter_m=0.311,
+        casing_diameter_m=0.2445,
+        setting_depth_md_m=1850.0,
+        casing_type="surface",
+        cement_volume_m3=24.5,
+        cement_type="Class G Neat",
+        recorded_outcome="good_returns",
+    )
+    assert casing.casing_type == "surface"
+
+    # Invalid mud input: base < top
+    with pytest.raises(ValueError, match="base_md_m must be >= interval_top_md_m"):
+        MudProgramInput(
+            interval_top_md_m=1800.0,
+            interval_base_md_m=1200.0,
+            mud_type="WBM",
+            mud_density_kg_m3=1150.0,
+        )
+
+    # Valid mud input
+    mud = MudProgramInput(
+        interval_top_md_m=500.0,
+        interval_base_md_m=1850.0,
+        mud_type="KCL-Polymer",
+        mud_density_kg_m3=1180.0,
+    )
+    assert mud.mud_density_kg_m3 == 1180.0
+
+    # Invalid reservoir property input: base < top
+    with pytest.raises(ValueError, match="base_md_m must be >= top_md_m"):
+        ReservoirPropertyInput(
+            formation_interval_id=uuid4(),
+            property_type="porosity",
+            value=18.5,
+            unit="%",
+            top_md_m=1850.0,
+            base_md_m=1800.0,
+        )
+
+    # Valid reservoir property input
+    rp = ReservoirPropertyInput(
+        formation_interval_id=uuid4(),
+        property_type="permeability",
+        value=52.0,
+        unit="mD",
+        top_md_m=1800.0,
+        base_md_m=1850.0,
+    )
+    assert rp.value == 52.0
 
 
 @pytest.mark.skipif(os.getenv("NWIS_INTEGRATION") != "1", reason="Needs NWIS test DB")

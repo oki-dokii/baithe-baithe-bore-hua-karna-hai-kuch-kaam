@@ -39,9 +39,9 @@ def extract_best_answer_sentence(text: str, query_tokens: List[str]) -> Tuple[st
         matched = sum(1 for token in query_tokens if token in s_clean)
         if matched == 0:
             continue
-        
+
         score = matched / max(len(query_tokens), 1)
-        
+
         # Boost for containing specific domain entities (mud weight, bbl, depth, etc.)
         for regex in KEY_ENTITIES.values():
             if regex.search(sentence):
@@ -63,8 +63,9 @@ def query_rag_engine(
 ) -> Dict[str, Any]:
     """Search ingested source passages and verified facts to answer free-form drilling questions."""
     # 1. First check if an approved fact directly answers this
-    cur = conn.cursor()
-    cur.execute(
+    # Fix #11: execute directly on conn (which already has dict_row row_factory)
+    # rather than opening a raw cursor that would return tuple rows.
+    direct_fact = conn.execute(
         """SELECT f.id, f.answer, f.quote, f.reviewer_name, p.page_number, p.section_label,
                   sd.id AS document_id, sd.filename
            FROM reviewed_report_fact f
@@ -74,14 +75,14 @@ def query_rag_engine(
              AND (f.fact_key ILIKE %s OR f.answer ILIKE %s)
            LIMIT 1""",
         (dataset_id, f"%{question.strip()[:20]}%", f"%{question.strip()[:20]}%"),
-    )
-    direct_fact = cur.fetchone()
+    ).fetchone()
     if direct_fact:
         return {
             "question": question,
             "status": "answered",
             "answer": direct_fact["answer"],
-            "confidence": 1.0,
+            # Fix #8: curated facts are given relevance_score=1.0, not "confidence"
+            "relevance_score": 1.0,
             "answer_kind": "reviewer_curated_fact",
             "reason": None,
             "citations": [
@@ -104,21 +105,29 @@ def query_rag_engine(
             "question": question,
             "status": "no_evidence_found",
             "answer": None,
-            "confidence": 0.0,
+            "relevance_score": 0.0,
             "reason": "query_too_short_or_generic",
             "citations": [],
         }
 
-    # Build ILIKE search pattern or token clauses
-    like_conditions = " OR ".join(["p.raw_text ILIKE %s" for _ in tokens[:6]])
+    # Fix #3: Build WHERE clause as a list of parameterised conditions — no
+    # f-string SQL injection risk. bore_clause is expressed as a typed boolean
+    # parameter, never injected as raw SQL text.
+    conditions: List[str] = []
     params: List[Any] = [dataset_id]
-    if wellbore_id:
-        bore_clause = "AND EXISTS (SELECT 1 FROM document_wellbore dw WHERE dw.document_id=sd.id AND dw.wellbore_id=%s)"
-        params.append(wellbore_id)
-    else:
-        bore_clause = ""
 
+    if wellbore_id:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM document_wellbore dw WHERE dw.document_id=sd.id AND dw.wellbore_id=%s)"
+        )
+        params.append(wellbore_id)
+
+    # Up to 6 token ILIKE conditions, all parameterised
+    token_conditions = ["p.raw_text ILIKE %s" for _ in tokens[:6]]
+    conditions.append(f"({' OR '.join(token_conditions)})")
     params.extend([f"%{t}%" for t in tokens[:6]])
+
+    where_clause = "AND " + " AND ".join(conditions) if conditions else ""
 
     query_sql = f"""
         SELECT p.id, p.page_number, p.section_label, p.raw_text,
@@ -126,21 +135,20 @@ def query_rag_engine(
         FROM extracted_passage p
         JOIN source_document sd ON sd.id=p.document_id
         WHERE sd.dataset_id=%s
-        {bore_clause}
-        AND ({like_conditions})
+        {where_clause}
         ORDER BY p.id LIMIT 25
-    """
+    """  # nosec — where_clause contains only hardcoded SQL fragments with %s placeholders
 
-    rows = cur.execute(query_sql, tuple(params)).fetchall()
+    rows = conn.execute(query_sql, tuple(params)).fetchall()
 
     scored_citations = []
     best_overall_answer = ""
-    highest_confidence = 0.0
+    highest_relevance = 0.0
 
     for row in rows:
         passage_text = row["raw_text"]
-        best_sentence, confidence = extract_best_answer_sentence(passage_text, tokens)
-        if confidence > 0.20:
+        best_sentence, relevance = extract_best_answer_sentence(passage_text, tokens)
+        if relevance > 0.20:
             scored_citations.append({
                 "document_id": str(row["document_id"]),
                 "filename": row["filename"],
@@ -148,20 +156,22 @@ def query_rag_engine(
                 "section_label": row["section_label"],
                 "quote": best_sentence or passage_text[:250],
                 "full_passage": passage_text,
-                "relevance_score": round(confidence, 3),
+                # Fix #8: renamed from "confidence" to "relevance_score" to
+                # avoid implying this heuristic is a calibrated probability.
+                "relevance_score": round(relevance, 3),
             })
-            if confidence > highest_confidence:
-                highest_confidence = confidence
+            if relevance > highest_relevance:
+                highest_relevance = relevance
                 best_overall_answer = best_sentence or passage_text
 
     scored_citations.sort(key=lambda c: c["relevance_score"], reverse=True)
 
-    if scored_citations and highest_confidence >= 0.35:
+    if scored_citations and highest_relevance >= 0.35:
         return {
             "question": question,
             "status": "answered",
             "answer": best_overall_answer,
-            "confidence": round(highest_confidence, 2),
+            "relevance_score": round(highest_relevance, 2),
             "answer_kind": "grounded_passage_extraction",
             "reason": None,
             "citations": scored_citations[:4],
@@ -171,7 +181,7 @@ def query_rag_engine(
         "question": question,
         "status": "no_evidence_found",
         "answer": None,
-        "confidence": 0.0,
+        "relevance_score": 0.0,
         "reason": "no_supporting_passages_found",
         "citations": [],
     }

@@ -1,7 +1,7 @@
 """Read-only planning and evidence views; no risk probability or drilling advice."""
 
 from collections import Counter, defaultdict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -10,9 +10,52 @@ from nwis.db import connection
 from nwis.drilling_parameters import eligible_anchors
 from nwis.intelligence import bore, interval_rows
 from nwis.provenance import may_approve_event
-from nwis.security import current_principal
+from nwis.security import current_principal, require_role
 
 router = APIRouter(prefix="/api/v1")
+
+
+class CasingProgramInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    hole_diameter_m: float = Field(gt=0)
+    casing_diameter_m: float = Field(gt=0)
+    setting_depth_md_m: float = Field(ge=0)
+    casing_type: str = Field(min_length=1)
+    cement_volume_m3: float | None = Field(default=None, ge=0)
+    cement_type: str | None = None
+    recorded_outcome: str | None = None
+    notes: str | None = None
+
+
+class MudProgramInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interval_top_md_m: float = Field(ge=0)
+    interval_base_md_m: float = Field(ge=0)
+    mud_type: str = Field(min_length=1)
+    mud_density_kg_m3: float = Field(gt=0)
+    rheology_notes: str | None = None
+
+    @model_validator(mode="after")
+    def valid_interval(self):
+        if self.interval_base_md_m < self.interval_top_md_m:
+            raise ValueError("interval_base_md_m must be >= interval_top_md_m")
+        return self
+
+
+class ReservoirPropertyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    formation_interval_id: UUID
+    property_type: str = Field(min_length=1, max_length=50)
+    value: float | None = None
+    unit: str = Field(min_length=1, max_length=20)
+    top_md_m: float | None = Field(default=None, ge=0)
+    base_md_m: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def valid_interval(self):
+        if self.top_md_m is not None and self.base_md_m is not None and self.base_md_m < self.top_md_m:
+            raise ValueError("base_md_m must be >= top_md_m")
+        return self
 
 
 class PlanningPoint(BaseModel):
@@ -156,6 +199,45 @@ def depth_track(wellbore_id: UUID, _principal=Depends(current_principal)):
                            if row["wellbore_id"] == wellbore_id)
         samples.sort(key=lambda row: (row["md_m"], row["observed_at"]))
         samples = samples[:200]
+
+        # Casing Program (Data Source viii)
+        casing_rows = conn.execute(
+            """SELECT c.id, c.hole_diameter_m, c.casing_diameter_m, c.setting_depth_md_m, c.casing_type,
+                      m.cement_volume_m3, m.cement_type, m.recorded_outcome
+               FROM casing_program c
+               LEFT JOIN cementing_operation m ON m.casing_id = c.id
+               WHERE c.wellbore_id = %s
+               ORDER BY c.setting_depth_md_m ASC""",
+            (wellbore_id,),
+        ).fetchall()
+
+        # Mud Program (Data Source viii)
+        mud_rows = conn.execute(
+            """SELECT id, interval_top_md_m, interval_base_md_m, mud_type, mud_density_kg_m3, rheology_notes
+               FROM mud_program
+               WHERE wellbore_id = %s
+               ORDER BY interval_top_md_m ASC""",
+            (wellbore_id,),
+        ).fetchall()
+
+        # Reservoir Properties (Data Source v)
+        reservoir_rows = conn.execute(
+            """SELECT rp.id, rp.formation_interval_id, rp.property_type, rp.value, rp.unit,
+                      rp.top_md_m, rp.base_md_m, f.display_name AS formation_name
+               FROM reservoir_property rp
+               JOIN formation_interval fi ON fi.id = rp.formation_interval_id
+               JOIN formation f ON f.id = fi.formation_id
+               WHERE fi.wellbore_id = %s
+               ORDER BY rp.top_md_m ASC NULLS LAST, rp.property_type ASC""",
+            (wellbore_id,),
+        ).fetchall()
+
+        missing = ["lithology"]
+        if not casing_rows:
+            missing.append("reviewed_casing")
+        if not mud_rows:
+            missing.append("reviewed_mud_weight")
+
     return {
         "wellbore_id": str(wellbore_id), "source_kind": identity["data_kind"],
         "intervals": [{"id": row["id"], "name": row["display_name"],
@@ -165,5 +247,218 @@ def depth_track(wellbore_id: UUID, _principal=Depends(current_principal)):
         "parameters": [{"sample_id": row["sample_id"], "md_m": row["md_m"],
                         "rop_m_per_h": row["rop_m_per_h"],
                         "torque_kn_m": row["torque_kn_m"]} for row in samples],
+        "casing_program": [
+            {
+                "id": str(r["id"]),
+                "casing_type": r["casing_type"],
+                "setting_depth_md_m": float(r["setting_depth_md_m"]) if r["setting_depth_md_m"] is not None else None,
+                "hole_diameter_m": float(r["hole_diameter_m"]) if r["hole_diameter_m"] is not None else None,
+                "casing_diameter_m": float(r["casing_diameter_m"]) if r["casing_diameter_m"] is not None else None,
+                "cement_type": r["cement_type"],
+                "cement_volume_m3": float(r["cement_volume_m3"]) if r["cement_volume_m3"] is not None else None,
+                "recorded_outcome": r["recorded_outcome"],
+            }
+            for r in casing_rows
+        ],
+        "mud_program": [
+            {
+                "id": str(r["id"]),
+                "top_md_m": float(r["interval_top_md_m"]) if r["interval_top_md_m"] is not None else None,
+                "base_md_m": float(r["interval_base_md_m"]) if r["interval_base_md_m"] is not None else None,
+                "mud_type": r["mud_type"],
+                "mud_density_kg_m3": float(r["mud_density_kg_m3"]) if r["mud_density_kg_m3"] is not None else None,
+                "rheology_notes": r["rheology_notes"],
+            }
+            for r in mud_rows
+        ],
+        "reservoir_properties": [
+            {
+                "id": str(r["id"]),
+                "formation_interval_id": str(r["formation_interval_id"]),
+                "formation_name": r["formation_name"],
+                "property_type": r["property_type"],
+                "value": float(r["value"]) if r["value"] is not None else None,
+                "unit": r["unit"],
+                "top_md_m": float(r["top_md_m"]) if r["top_md_m"] is not None else None,
+                "base_md_m": float(r["base_md_m"]) if r["base_md_m"] is not None else None,
+            }
+            for r in reservoir_rows
+        ],
         "parameter_note": "Qualified historical forward-drilling samples only; absence is not zero.",
-        "missing_lanes": ["lithology", "reviewed_casing", "reviewed_mud_weight"]}
+        "missing_lanes": missing,
+    }
+
+
+@router.get("/wellbores/{wellbore_id}/casing-program")
+def get_casing_program(wellbore_id: UUID, _principal=Depends(current_principal)):
+    """Retrieve casing program and cementing records for a wellbore (Data Source viii)."""
+    with connection() as conn:
+        rows = conn.execute(
+            """SELECT c.id, c.hole_diameter_m, c.casing_diameter_m, c.setting_depth_md_m, c.casing_type,
+                      m.cement_volume_m3, m.cement_type, m.recorded_outcome, m.notes AS cementing_notes
+               FROM casing_program c
+               LEFT JOIN cementing_operation m ON m.casing_id = c.id
+               WHERE c.wellbore_id = %s
+               ORDER BY c.setting_depth_md_m ASC""",
+            (wellbore_id,),
+        ).fetchall()
+        return {
+            "wellbore_id": str(wellbore_id),
+            "casing_strings": [
+                {
+                    "id": str(r["id"]),
+                    "hole_diameter_m": float(r["hole_diameter_m"]) if r["hole_diameter_m"] is not None else None,
+                    "casing_diameter_m": float(r["casing_diameter_m"]) if r["casing_diameter_m"] is not None else None,
+                    "setting_depth_md_m": float(r["setting_depth_md_m"]) if r["setting_depth_md_m"] is not None else None,
+                    "casing_type": r["casing_type"],
+                    "cementing": {
+                        "cement_volume_m3": float(r["cement_volume_m3"]) if r["cement_volume_m3"] is not None else None,
+                        "cement_type": r["cement_type"],
+                        "recorded_outcome": r["recorded_outcome"],
+                        "notes": r["cementing_notes"],
+                    } if r["cement_type"] or r["cement_volume_m3"] is not None else None,
+                }
+                for r in rows
+            ],
+        }
+
+
+@router.post("/wellbores/{wellbore_id}/casing-program", status_code=201)
+def add_casing_program(
+    wellbore_id: UUID,
+    body: CasingProgramInput,
+    principal=Depends(require_role("engineer")),
+):
+    """Record a casing shoe and optional cementing operation for a wellbore."""
+    with connection() as conn:
+        wellbore = conn.execute("SELECT id FROM wellbore WHERE id=%s", (wellbore_id,)).fetchone()
+        if not wellbore:
+            raise HTTPException(404, "Wellbore not found")
+        casing_id = uuid4()
+        conn.execute(
+            """INSERT INTO casing_program(id, wellbore_id, hole_diameter_m, casing_diameter_m, setting_depth_md_m, casing_type)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (casing_id, wellbore_id, body.hole_diameter_m, body.casing_diameter_m, body.setting_depth_md_m, body.casing_type),
+        )
+        if body.cement_type or body.cement_volume_m3 is not None:
+            conn.execute(
+                """INSERT INTO cementing_operation(id, casing_id, cement_volume_m3, cement_type, recorded_outcome, notes)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (uuid4(), casing_id, body.cement_volume_m3, body.cement_type, body.recorded_outcome, body.notes),
+            )
+        conn.execute(
+            "INSERT INTO audit_log(actor_name, action, entity_type, entity_id) VALUES (%s, 'add_casing_program', 'wellbore', %s)",
+            (principal.name, wellbore_id),
+        )
+        return {"id": str(casing_id), "status": "casing_recorded", "wellbore_id": str(wellbore_id)}
+
+
+@router.get("/wellbores/{wellbore_id}/mud-program")
+def get_mud_program(wellbore_id: UUID, _principal=Depends(current_principal)):
+    """Retrieve planned and recorded mud program intervals for a wellbore (Data Source viii)."""
+    with connection() as conn:
+        rows = conn.execute(
+            """SELECT id, interval_top_md_m, interval_base_md_m, mud_type, mud_density_kg_m3, rheology_notes
+               FROM mud_program
+               WHERE wellbore_id = %s
+               ORDER BY interval_top_md_m ASC""",
+            (wellbore_id,),
+        ).fetchall()
+        return {
+            "wellbore_id": str(wellbore_id),
+            "mud_intervals": [
+                {
+                    "id": str(r["id"]),
+                    "interval_top_md_m": float(r["interval_top_md_m"]) if r["interval_top_md_m"] is not None else None,
+                    "interval_base_md_m": float(r["interval_base_md_m"]) if r["interval_base_md_m"] is not None else None,
+                    "mud_type": r["mud_type"],
+                    "mud_density_kg_m3": float(r["mud_density_kg_m3"]) if r["mud_density_kg_m3"] is not None else None,
+                    "mud_density_ppg": round(float(r["mud_density_kg_m3"]) / 119.826, 2) if r["mud_density_kg_m3"] is not None else None,
+                    "rheology_notes": r["rheology_notes"],
+                }
+                for r in rows
+            ],
+        }
+
+
+@router.post("/wellbores/{wellbore_id}/mud-program", status_code=201)
+def add_mud_program(
+    wellbore_id: UUID,
+    body: MudProgramInput,
+    principal=Depends(require_role("engineer")),
+):
+    """Record a mud program interval for a wellbore."""
+    with connection() as conn:
+        wellbore = conn.execute("SELECT id FROM wellbore WHERE id=%s", (wellbore_id,)).fetchone()
+        if not wellbore:
+            raise HTTPException(404, "Wellbore not found")
+        mud_id = uuid4()
+        conn.execute(
+            """INSERT INTO mud_program(id, wellbore_id, interval_top_md_m, interval_base_md_m, mud_type, mud_density_kg_m3, rheology_notes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (mud_id, wellbore_id, body.interval_top_md_m, body.interval_base_md_m, body.mud_type, body.mud_density_kg_m3, body.rheology_notes),
+        )
+        conn.execute(
+            "INSERT INTO audit_log(actor_name, action, entity_type, entity_id) VALUES (%s, 'add_mud_program', 'wellbore', %s)",
+            (principal.name, wellbore_id),
+        )
+        return {"id": str(mud_id), "status": "mud_interval_recorded", "wellbore_id": str(wellbore_id)}
+
+
+@router.get("/wellbores/{wellbore_id}/reservoir-properties")
+def get_reservoir_properties(wellbore_id: UUID, _principal=Depends(current_principal)):
+    """Retrieve reservoir properties (porosity, permeability, pore pressure, etc.) for a wellbore (Data Source v)."""
+    with connection() as conn:
+        rows = conn.execute(
+            """SELECT rp.id, rp.formation_interval_id, rp.property_type, rp.value, rp.unit,
+                      rp.top_md_m, rp.base_md_m, f.display_name AS formation_name
+               FROM reservoir_property rp
+               JOIN formation_interval fi ON fi.id = rp.formation_interval_id
+               JOIN formation f ON f.id = fi.formation_id
+               WHERE fi.wellbore_id = %s
+               ORDER BY rp.top_md_m ASC NULLS LAST, rp.property_type ASC""",
+            (wellbore_id,),
+        ).fetchall()
+        return {
+            "wellbore_id": str(wellbore_id),
+            "reservoir_properties": [
+                {
+                    "id": str(r["id"]),
+                    "formation_interval_id": str(r["formation_interval_id"]),
+                    "formation_name": r["formation_name"],
+                    "property_type": r["property_type"],
+                    "value": float(r["value"]) if r["value"] is not None else None,
+                    "unit": r["unit"],
+                    "top_md_m": float(r["top_md_m"]) if r["top_md_m"] is not None else None,
+                    "base_md_m": float(r["base_md_m"]) if r["base_md_m"] is not None else None,
+                }
+                for r in rows
+            ],
+        }
+
+
+@router.post("/wellbores/{wellbore_id}/reservoir-properties", status_code=201)
+def add_reservoir_property(
+    wellbore_id: UUID,
+    body: ReservoirPropertyInput,
+    principal=Depends(require_role("engineer")),
+):
+    """Record a verified reservoir property for a formation interval in a wellbore (Data Source v)."""
+    with connection() as conn:
+        interval = conn.execute(
+            "SELECT id FROM formation_interval WHERE id=%s AND wellbore_id=%s",
+            (body.formation_interval_id, wellbore_id),
+        ).fetchone()
+        if not interval:
+            raise HTTPException(404, "Formation interval not found for this wellbore")
+        prop_id = uuid4()
+        conn.execute(
+            """INSERT INTO reservoir_property(id, formation_interval_id, property_type, value, unit, top_md_m, base_md_m)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (prop_id, body.formation_interval_id, body.property_type, body.value, body.unit, body.top_md_m, body.base_md_m),
+        )
+        conn.execute(
+            "INSERT INTO audit_log(actor_name, action, entity_type, entity_id) VALUES (%s, 'add_reservoir_property', 'wellbore', %s)",
+            (principal.name, wellbore_id),
+        )
+        return {"id": str(prop_id), "status": "reservoir_property_recorded", "wellbore_id": str(wellbore_id)}

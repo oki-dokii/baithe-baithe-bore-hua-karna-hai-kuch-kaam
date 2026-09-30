@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import "./india-map.css";
-import { DepthTrack, MudWindow, PlanningPanel, PlanningPoint } from "./ExplorationExtras";
+import { CasingAndMudPanel, DepthTrack, MudWindow, PlanningPanel, PlanningPoint, ReservoirPropertiesPanel } from "./ExplorationExtras";
 import OffsetBrief, { OffsetBriefData } from "./OffsetBrief";
 import IndiaWellMap from "./IndiaMap";
 import { ALL_SYNTHETIC_WELLS, haversineKm } from "./syntheticWellsData";
@@ -1208,6 +1210,10 @@ export default function Intelligence({ token }: { token: string }) {
                 formationId={intervalId || null}
                 onOpenCase={openCase}
               />
+              <DepthTrack token={token} wellboreId={activeId} onOpenCase={openCase} />
+              <MudWindow token={token} wellboreId={activeId} />
+              <ReservoirPropertiesPanel token={token} wellboreId={activeId} />
+              <CasingAndMudPanel token={token} wellboreId={activeId} />
             </section>
           )}
 

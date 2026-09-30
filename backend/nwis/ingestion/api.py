@@ -656,6 +656,22 @@ def review(
                      "rationale_sha256": text_digest(body.rationale)},
         )
         conn.execute(
+            """INSERT INTO audit_log(actor_name, action, entity_type, entity_id, details)
+               VALUES (%s, %s, 'document_event_draft', %s, %s)""",
+            (
+                principal.name,
+                f"review_{body.decision}",
+                draft["id"],
+                Jsonb({
+                    "document_id": str(document_id),
+                    "version": draft["version"] + 1,
+                    "event_id": str(event_id) if event_id else None,
+                    "decision": body.decision,
+                    "rationale": body.rationale,
+                }),
+            ),
+        )
+        conn.execute(
             """UPDATE source_document SET review_version=review_version+1,ingest_status=CASE WHEN
             EXISTS(SELECT 1 FROM document_event_draft WHERE document_id=%s AND state='needs_review')
             THEN 'needs_review' ELSE 'reviewed' END WHERE id=%s""",
@@ -735,6 +751,19 @@ def manual_candidate(
             payload={"review_decision_id": str(review_id), "document_id": str(document_id),
                      "page_number": body.page_number,
                      "rationale_sha256": text_digest(body.rationale)},
+        )
+        conn.execute(
+            """INSERT INTO audit_log(actor_name, action, entity_type, entity_id, details)
+               VALUES (%s, 'review_manual_create', 'document_event_draft', %s, %s)""",
+            (
+                principal.name,
+                candidate_id,
+                Jsonb({
+                    "document_id": str(document_id),
+                    "page_number": body.page_number,
+                    "rationale": body.rationale,
+                }),
+            ),
         )
         conn.execute(
             "UPDATE source_document SET review_version=review_version+1,ingest_status='needs_review' WHERE id=%s",

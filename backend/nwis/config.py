@@ -1,4 +1,3 @@
-from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -28,6 +27,14 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
+    allowed_origins: str = "*"
+    source_mode: Literal["SIMULATED", "LIVE", "HYBRID"] = "SIMULATED"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        if self.allowed_origins.strip() == "*":
+            return ["*"]
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
     def unique_tokens(self) -> "Settings":
@@ -44,6 +51,30 @@ class Settings(BaseSettings):
         return self
 
 
-@lru_cache
+_settings_instance: Settings | None = None
+
+
 def get_settings() -> Settings:
-    return Settings()
+    """Return the process-wide Settings singleton.
+
+    Fix #2: The previous @lru_cache implementation bypassed FastAPI's DI graph
+    and made it impossible to override settings in tests without patching the
+    cache object. This module-level singleton is functionally equivalent but
+    can be replaced via override_settings() in test fixtures.
+    """
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+    return _settings_instance
+
+
+def override_settings(s: Settings) -> None:
+    """Replace the singleton — use only in tests."""
+    global _settings_instance
+    _settings_instance = s
+
+
+def reset_settings() -> None:
+    """Clear the singleton so the next call re-reads from env — use only in tests."""
+    global _settings_instance
+    _settings_instance = None

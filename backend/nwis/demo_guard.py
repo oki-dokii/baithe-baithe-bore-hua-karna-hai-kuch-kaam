@@ -35,7 +35,13 @@ def main() -> None:
         or (not args.allow_unindexed and rows["indexed"] != 1)
     ):
         raise SystemExit("Demo DB is not the isolated one-source synthetic scenario")
-    model()  # Local-only load: fail before starting services if weights are missing.
+    if get_settings().semantic_enabled:
+        # Fix #10: Only attempt to load the semantic model when the feature
+        # is explicitly enabled.  Previously this call was unconditional and
+        # would crash the guard script whenever the optional `fastembed`
+        # package was absent (i.e. `semantic` extra not installed).
+        model()  # Fail fast if semantic is on but weights are missing.
+        print("Semantic model loaded successfully")
     print("One-source synthetic demo guard passed")
 
 

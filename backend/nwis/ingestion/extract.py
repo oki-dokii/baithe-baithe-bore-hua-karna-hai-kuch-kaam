@@ -2,7 +2,7 @@ import json
 import re
 
 import httpx
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from nwis.config import get_settings
 from nwis.ingestion.contracts import Candidate, CandidateBatch, IngestionFailure
@@ -189,3 +189,102 @@ def extract_candidates(text: str, data_kind: str) -> list[Candidate]:
 def quote_is_supported(quote: str, text: str) -> bool:
     normalized = " ".join(quote.split())
     return bool(normalized) and normalized in " ".join(text.split())
+
+
+class ReservoirPropertyCandidate(BaseModel):
+    property_type: str
+    value: float | None
+    unit: str
+    top_md_m: float | None = None
+    base_md_m: float | None = None
+    formation_name: str | None = None
+    quote: str
+
+
+def extract_reservoir_property_candidates(text: str) -> list[ReservoirPropertyCandidate]:
+    """Extract cited reservoir properties from Well Completion Report / Mud logging sections.
+    Follows conservative extraction principles: requires explicit numeric values with valid oilfield units.
+    """
+    candidates: list[ReservoirPropertyCandidate] = []
+
+    # 1. Porosity: e.g. "porosity 18.5%", "average porosity of 22%", "phi = 0.18"
+    poro_matches = re.finditer(
+        r"([^.\n]*?\b(?:porosity|phi|porous)\b[^.\n]*?(\d+(?:\.\d+)?)\s*(%|percent|fraction)?[^.\n]*)",
+        text,
+        re.I,
+    )
+    for m in poro_matches:
+        raw_sentence, num_str, unit_str = m.group(1).strip(), m.group(2), m.group(3)
+        try:
+            val = float(num_str)
+            if 0 < val <= 50:
+                unit = "%" if unit_str in ("%", "percent", None) else unit_str
+                d_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*m\b", raw_sentence, re.I)
+                top = float(d_match.group(1)) if d_match else None
+                base = float(d_match.group(2)) if d_match else None
+                candidates.append(
+                    ReservoirPropertyCandidate(
+                        property_type="porosity",
+                        value=val,
+                        unit=unit,
+                        top_md_m=top,
+                        base_md_m=base,
+                        quote=raw_sentence[:300],
+                    )
+                )
+        except ValueError:
+            pass
+
+    # 2. Permeability: e.g. "permeability 45 mD", "k = 120 md", "air permeability: 32 mD"
+    perm_matches = re.finditer(
+        r"([^.\n]*?\b(?:permeability|perm)\b[^.\n]*?(\d+(?:\.\d+)?)\s*(mD|md|millidarcies|darcies)\b[^.\n]*)",
+        text,
+        re.I,
+    )
+    for m in perm_matches:
+        raw_sentence, num_str, unit_str = m.group(1).strip(), m.group(2), m.group(3)
+        try:
+            val = float(num_str)
+            d_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*m\b", raw_sentence, re.I)
+            top = float(d_match.group(1)) if d_match else None
+            base = float(d_match.group(2)) if d_match else None
+            candidates.append(
+                ReservoirPropertyCandidate(
+                    property_type="permeability",
+                    value=val,
+                    unit=unit_str.upper() if unit_str.lower() == "md" else unit_str,
+                    top_md_m=top,
+                    base_md_m=base,
+                    quote=raw_sentence[:300],
+                )
+            )
+        except ValueError:
+            pass
+
+    # 3. Pore Pressure: e.g. "pore pressure of 9.8 ppg", "pore pressure: 1.18 sg", "formation pressure 3400 psi"
+    pp_matches = re.finditer(
+        r"([^.\n]*?\b(?:pore\s+pressure|formation\s+pressure)\b[^.\n]*?(\d+(?:\.\d+)?)\s*(ppg|psi|bar|sg|kg/m3)\b[^.\n]*)",
+        text,
+        re.I,
+    )
+    for m in pp_matches:
+        raw_sentence, num_str, unit_str = m.group(1).strip(), m.group(2), m.group(3)
+        try:
+            val = float(num_str)
+            d_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*m\b", raw_sentence, re.I)
+            top = float(d_match.group(1)) if d_match else None
+            base = float(d_match.group(2)) if d_match else None
+            candidates.append(
+                ReservoirPropertyCandidate(
+                    property_type="pore_pressure",
+                    value=val,
+                    unit=unit_str.lower(),
+                    top_md_m=top,
+                    base_md_m=base,
+                    quote=raw_sentence[:300],
+                )
+            )
+        except ValueError:
+            pass
+
+    return candidates

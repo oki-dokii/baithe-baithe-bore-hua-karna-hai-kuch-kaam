@@ -24,6 +24,13 @@ jobs:
           uv run --frozen --extra dev ruff check nwis migrations tests
           uv run --frozen --extra dev pytest
         # PDF/OCR fixtures exercise the actual tools, not mocks.
+      - name: Validate optional extras
+        working-directory: backend
+        run: |
+          uv sync --frozen --extra dev --extra semantic
+          uv run --frozen --extra dev --extra semantic python -c "from fastembed import TextEmbedding; from nwis.semantic import model"
+          uv sync --frozen --extra dev --extra voice
+          uv run --frozen --extra dev --extra voice python -c "from faster_whisper import WhisperModel; from nwis.voice import local_asr_available"
       - uses: actions/setup-node@v4
         with:
           node-version: "22.17.1"

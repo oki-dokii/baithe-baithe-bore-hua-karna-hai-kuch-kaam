@@ -33,7 +33,7 @@ def principal_for_token(token: str, settings: Settings | None = None) -> Princip
         # Connection failure fallback (e.g. unit tests without DB)
         pass
 
-    # Check against settings role tokens
+    # Check against settings role tokens (Fix #5: constant-time compare)
     try:
         active_settings = settings or get_settings()
         role_tokens = {
@@ -42,9 +42,9 @@ def principal_for_token(token: str, settings: Settings | None = None) -> Princip
             active_settings.reviewer_token: ("local-reviewer", "reviewer"),
             active_settings.admin_token: ("local-admin", "admin"),
         }
-        if token in role_tokens:
-            uname, r = role_tokens[token]
-            return Principal(name=uname, role=r)
+        for candidate, (uname, r) in role_tokens.items():
+            if hmac.compare_digest(token, candidate):
+                return Principal(name=uname, role=r)
     except Exception:
         pass
 

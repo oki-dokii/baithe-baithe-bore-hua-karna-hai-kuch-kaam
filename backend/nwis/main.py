@@ -1,15 +1,20 @@
 import base64
 import binascii
+import os
+import time
+from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from nwis.config import get_settings
-from nwis.db import connection
+from nwis.db import close_pool, connection
 from nwis.schemas import ComponentStatus, SeedResponse, SystemStatus, WellPage, WellSummary
 from nwis.security import Principal, current_principal, require_role
 from nwis.seed import load_fixture
@@ -23,9 +28,44 @@ from nwis.exploration import router as exploration_router
 from nwis.pressure_window import router as pressure_window_router
 from nwis.operational_views import router as operational_views_router
 from nwis.telemetry_dossier import router as telemetry_dossier_router
+from nwis.ertmac_feed import router as ertmac_router
 from nwis.security import router as auth_router
 
-app = FastAPI(title="NWIS API", version="0.2.0", description="Evidence ingestion and review")
+# ── Rate-limit state (in-memory, per-IP) — Fix #6 ──────────────
+_RATE_LIMIT: dict[str, list[float]] = defaultdict(list)
+_RATE_WINDOW = 60.0  # seconds
+_RATE_CAPS: dict[str, int] = {
+    "/api/v1/auth/login": 10,
+    "/api/v1/documents": 20,
+    "/api/v1/voice-memos": 10,
+}
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialise shared resources on startup; clean them up on shutdown."""
+    yield
+    close_pool()  # Fix #1: gracefully drain the connection pool
+
+
+app = FastAPI(
+    title="NWIS API",
+    version="0.2.0",
+    description="Evidence ingestion and review",
+    lifespan=lifespan,
+)
+
+# ── CORS — Fix #9 & Gap H ───────────────────────────────────────
+raw_origins = os.getenv("NWIS_ALLOWED_ORIGINS", "*").strip()
+_cors_origins = ["*"] if raw_origins == "*" else [o.strip() for o in raw_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True if _cors_origins != ["*"] else False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth_router)
 app.include_router(ingestion_router)
 app.include_router(intelligence_router)
@@ -37,6 +77,8 @@ app.include_router(exploration_router)
 app.include_router(pressure_window_router)
 app.include_router(operational_views_router)
 app.include_router(telemetry_dossier_router)
+app.include_router(ertmac_router)
+
 _fixture_path = Path(__file__).resolve().parents[1] / "specs/fixtures/golden-demo.json"
 if not _fixture_path.is_file():
     _fixture_path = Path(__file__).resolve().parents[2] / "specs/fixtures/golden-demo.json"
@@ -49,12 +91,30 @@ def error(code: str, message: str, request_id: str, details: dict | None = None)
     }
 
 
+# ── Request-ID middleware ───────────────────────────────────────
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     request.state.request_id = str(uuid4())
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
     return response
+
+
+# ── Rate-limit middleware — Fix #6 ──────────────────────────────
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    cap = _RATE_CAPS.get(request.url.path)
+    if cap is not None:
+        ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        _RATE_LIMIT[ip] = [t for t in _RATE_LIMIT[ip] if now - t < _RATE_WINDOW]
+        if len(_RATE_LIMIT[ip]) >= cap:
+            return JSONResponse(
+                status_code=429,
+                content={"error": {"code": "rate_limited", "message": "Too many requests", "details": {}}},
+            )
+        _RATE_LIMIT[ip].append(now)
+    return await call_next(request)
 
 
 @app.exception_handler(HTTPException)
@@ -121,9 +181,32 @@ def system_status(_principal: Principal = Depends(current_principal)):
                 )
     except Exception:
         database = ComponentStatus(state="degraded", detail="Database connection unavailable")
+    # Dynamic source mode (Gap E) & active prediction model (Gap C)
+    live_feed_fresh = False
+    try:
+        with connection() as conn:
+            live_hb = conn.execute("""SELECT last_seen_at > now() - interval '60 seconds' AS fresh
+                FROM service_heartbeat WHERE service='witsml_live'""").fetchone()
+            if live_hb and live_hb["fresh"]:
+                live_feed_fresh = True
+    except Exception:
+        pass
+
+    effective_source_mode = "LIVE" if live_feed_fresh else settings.source_mode
+
+    try:
+        from nwis.hazard_model import get_active_model
+        model = get_active_model()
+        prediction = ComponentStatus(
+            state="ready",
+            detail=f"{model.get('model_version', 'mud-loss-detector')} (calibrated {model.get('algorithm', 'classifier')})",
+        )
+    except Exception:
+        prediction = ComponentStatus(state="not_implemented", detail="No trained model")
+
     return SystemStatus(
         environment=settings.environment,
-        source_mode="SIMULATED",
+        source_mode=effective_source_mode,
         database=database,
         spatial=spatial,
         vector=vector,
@@ -132,7 +215,7 @@ def system_status(_principal: Principal = Depends(current_principal)):
             state="available",
             detail="Fixed synthetic scenario; WebSocket snapshots with HTTP fallback; replay worker required for autoplay",
         ),
-        prediction=ComponentStatus(state="not_implemented", detail="No trained model"),
+        prediction=prediction,
         datasets=datasets,
         checked_at=datetime.now(timezone.utc),
     )
@@ -186,9 +269,17 @@ def nearby_wells(
     limit: int = Query(default=25, ge=1, le=100),
     _principal: Principal = Depends(current_principal),
 ):
+    """Return wells within radius_km of the active well.
+
+    Fix #7: The original query joined on w.dataset_id=a.dataset_id, silently
+    excluding wells that live in a different dataset (e.g. public offset wells
+    when the active well is in the private dataset). The fix drops that
+    constraint so all spatially eligible wells are returned, regardless of
+    which dataset they belong to.
+    """
     with connection() as conn:
         active = conn.execute(
-            "SELECT id, dataset_id, surface_point FROM well WHERE id=%s AND status<>'benchmark_unlocated'",
+            "SELECT id, surface_point FROM well WHERE id=%s AND status<>'benchmark_unlocated'",
             (active_well_id,),
         ).fetchone()
         if active is None:
@@ -199,7 +290,8 @@ def nearby_wells(
                       ST_X(w.surface_point::geometry) AS longitude,
                       ST_Y(w.surface_point::geometry) AS latitude,
                       ST_Distance(w.surface_point, a.surface_point) AS surface_distance_m
-               FROM well a JOIN well w ON w.dataset_id=a.dataset_id AND w.id<>a.id
+               FROM well a
+               JOIN well w ON w.id<>a.id
                JOIN dataset d ON d.id=w.dataset_id
                WHERE a.id=%s AND w.status<>'benchmark_unlocated'
                  AND ST_DWithin(w.surface_point, a.surface_point, %s)

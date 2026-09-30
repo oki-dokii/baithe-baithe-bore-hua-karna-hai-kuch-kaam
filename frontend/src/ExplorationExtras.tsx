@@ -469,3 +469,970 @@ export function PlanningPanel({ token, datasetId, point, radius, formationId, on
     </>}
   </section>;
 }
+
+type CasingString = {
+  id: string;
+  hole_diameter_m: number | null;
+  casing_diameter_m: number | null;
+  setting_depth_md_m: number | null;
+  casing_type: string;
+  cementing: {
+    cement_volume_m3: number | null;
+    cement_type: string | null;
+    recorded_outcome: string | null;
+    notes: string | null;
+  } | null;
+};
+
+type CasingResponse = {
+  wellbore_id: string;
+  casing_strings: CasingString[];
+};
+
+type MudInterval = {
+  id: string;
+  interval_top_md_m: number | null;
+  interval_base_md_m: number | null;
+  mud_type: string;
+  mud_density_kg_m3: number | null;
+  mud_density_ppg: number | null;
+  rheology_notes: string | null;
+};
+
+type MudResponse = {
+  wellbore_id: string;
+  mud_intervals: MudInterval[];
+};
+
+export function CasingAndMudPanel({ token, wellboreId }: { token: string; wellboreId: string }) {
+  const [activeTab, setActiveTab] = useState<"casing" | "mud">("casing");
+  const [casingData, setCasingData] = useState<CasingResponse | null>(null);
+  const [mudData, setMudData] = useState<MudResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Casing form state
+  const [casingType, setCasingType] = useState("surface");
+  const [casingDepth, setCasingDepth] = useState("");
+  const [casingDia, setCasingDia] = useState("0.2445"); // 9 5/8"
+  const [holeDia, setHoleDia] = useState("0.311"); // 12 1/4"
+  const [cementVol, setCementVol] = useState("");
+  const [cementType, setCementType] = useState("Class G Neat");
+  const [recordedOutcome, setRecordedOutcome] = useState("good_returns");
+
+  // Mud form state
+  const [mudTop, setMudTop] = useState("");
+  const [mudBase, setMudBase] = useState("");
+  const [mudType, setMudType] = useState("KCL-Polymer");
+  const [mudDensity, setMudDensity] = useState("1150"); // 1150 kg/m3 (~9.6 ppg)
+  const [rheologyNotes, setRheologyNotes] = useState("");
+
+  const refreshData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [casingRes, mudRes] = await Promise.all([
+        get<CasingResponse>(token, `/wellbores/${wellboreId}/casing-program`),
+        get<MudResponse>(token, `/wellbores/${wellboreId}/mud-program`),
+      ]);
+      setCasingData(casingRes);
+      setMudData(mudRes);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, [token, wellboreId]);
+
+  const handleAddCasing = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await fetch(`/api/v1/wellbores/${wellboreId}/casing-program`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          casing_type: casingType,
+          setting_depth_md_m: casingDepth ? Number(casingDepth) : null,
+          casing_diameter_m: casingDia ? Number(casingDia) : null,
+          hole_diameter_m: holeDia ? Number(holeDia) : null,
+          cement_volume_m3: cementVol ? Number(cementVol) : null,
+          cement_type: cementType || null,
+          recorded_outcome: recordedOutcome || null,
+        }),
+      });
+      setShowAddModal(false);
+      await refreshData();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddMud = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await fetch(`/api/v1/wellbores/${wellboreId}/mud-program`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          interval_top_md_m: mudTop ? Number(mudTop) : null,
+          interval_base_md_m: mudBase ? Number(mudBase) : null,
+          mud_type: mudType,
+          mud_density_kg_m3: mudDensity ? Number(mudDensity) : null,
+          rheology_notes: rheologyNotes || null,
+        }),
+      });
+      setShowAddModal(false);
+      await refreshData();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toInches = (m: number | null) => (m ? `${(m * 39.3701).toFixed(2)}"` : "—");
+
+  return (
+    <section className="explore-panel casing-mud-panel" aria-label="Casing, cementing, and mud program records">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Data Source VIII · Well Construction History</p>
+          <h2>Casing, Cementing & Drilling Fluid Program</h2>
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div className="segmented-control" role="tablist">
+            <button
+              role="tab"
+              aria-selected={activeTab === "casing"}
+              className={activeTab === "casing" ? "tab-active" : ""}
+              onClick={() => setActiveTab("casing")}
+            >
+              Casing & Cementing ({casingData?.casing_strings.length ?? 0})
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === "mud"}
+              className={activeTab === "mud" ? "tab-active" : ""}
+              onClick={() => setActiveTab("mud")}
+            >
+              Mud & Rheology ({mudData?.mud_intervals.length ?? 0})
+            </button>
+          </div>
+          <button
+            className="secondary-button"
+            onClick={() => setShowAddModal(true)}
+            style={{ padding: "4px 10px", fontSize: "0.75rem", borderRadius: "4px" }}
+          >
+            + Add Record
+          </button>
+        </div>
+      </div>
+
+      <p className="footnote">
+        Physical well construction specifications from verified completion reports and daily drilling reports.
+        Correlates casing shoe integrity, slurry displacement, and mud density profiles against known hazard depths.
+      </p>
+
+      {error && <p className="error" role="alert">{error}</p>}
+      {loading && <p role="status">Loading construction records…</p>}
+
+      {!loading && activeTab === "casing" && (
+        <div className="casing-section">
+          {(!casingData || casingData.casing_strings.length === 0) ? (
+            <p className="notice">No reviewed casing strings recorded for this wellbore yet. Click "+ Add Record" to log well architecture.</p>
+          ) : (
+            <>
+              {/* Visual Schematic Diagram */}
+              <div style={{ background: "rgba(10, 16, 26, 0.6)", borderRadius: "8px", padding: "16px", marginBottom: "16px", border: "1px solid rgba(120, 140, 160, 0.15)" }}>
+                <h4 style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "var(--teal, #38b2ac)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  Wellbore Architecture Schematic
+                </h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {casingData.casing_strings.map((str, idx) => {
+                    const widthPct = Math.max(25, 100 - idx * 18);
+                    return (
+                      <div key={str.id} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span style={{ width: "90px", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)", color: "#94a3b8" }}>
+                          {str.setting_depth_md_m != null ? `${str.setting_depth_md_m} m MD` : "TD N/A"}
+                        </span>
+                        <div
+                          style={{
+                            flex: 1,
+                            background: "rgba(20, 30, 45, 0.8)",
+                            borderRadius: "4px",
+                            height: "28px",
+                            display: "flex",
+                            alignItems: "center",
+                            padding: "0 10px",
+                            border: "1px solid rgba(56, 178, 172, 0.3)",
+                            position: "relative",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: `${widthPct}%`,
+                              background: "linear-gradient(90deg, rgba(56, 178, 172, 0.25), rgba(49, 130, 206, 0.2))",
+                              borderRight: "2px solid #38b2ac",
+                            }}
+                          />
+                          <span style={{ position: "relative", zIndex: 1, fontSize: "0.8rem", fontWeight: 600, color: "#f1f5f9" }}>
+                            {str.casing_type.toUpperCase()} · OD: {toInches(str.casing_diameter_m)} (Hole: {toInches(str.hole_diameter_m)})
+                          </span>
+                          {str.cementing?.cement_volume_m3 && (
+                            <span style={{ position: "relative", zIndex: 1, marginLeft: "auto", fontSize: "0.75rem", color: "#68d391" }}>
+                              {str.cementing.cement_volume_m3} m³ cement ({str.cementing.cement_type ?? "Slurry"}) · {str.cementing.recorded_outcome ?? "Completed"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem", textAlign: "left" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.2)", color: "#94a3b8" }}>
+                      <th style={{ padding: "8px 12px" }}>String Type</th>
+                      <th style={{ padding: "8px 12px" }}>Shoe Depth (m MD)</th>
+                      <th style={{ padding: "8px 12px" }}>Casing OD</th>
+                      <th style={{ padding: "8px 12px" }}>Hole Size</th>
+                      <th style={{ padding: "8px 12px" }}>Slurry Type</th>
+                      <th style={{ padding: "8px 12px" }}>Cement Vol</th>
+                      <th style={{ padding: "8px 12px" }}>Outcome</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {casingData.casing_strings.map((str) => (
+                      <tr key={str.id} style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.1)" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: 600, color: "#e2e8f0" }}>{human(str.casing_type)}</td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>{str.setting_depth_md_m ?? "—"}</td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>{toInches(str.casing_diameter_m)}</td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>{toInches(str.hole_diameter_m)}</td>
+                        <td style={{ padding: "8px 12px" }}>{str.cementing?.cement_type ?? "—"}</td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>
+                          {str.cementing?.cement_volume_m3 != null ? `${str.cementing.cement_volume_m3} m³` : "—"}
+                        </td>
+                        <td style={{ padding: "8px 12px" }}>
+                          <span style={{
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontSize: "0.75rem",
+                            background: str.cementing?.recorded_outcome === "good_returns" ? "rgba(72, 187, 120, 0.2)" : "rgba(237, 137, 54, 0.2)",
+                            color: str.cementing?.recorded_outcome === "good_returns" ? "#68d391" : "#fbd38d",
+                          }}>
+                            {str.cementing?.recorded_outcome ? human(str.cementing.recorded_outcome) : "verified"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {!loading && activeTab === "mud" && (
+        <div className="mud-section">
+          {(!mudData || mudData.mud_intervals.length === 0) ? (
+            <p className="notice">No reviewed mud program intervals recorded for this wellbore yet. Click "+ Add Record" to log drilling fluids.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem", textAlign: "left" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.2)", color: "#94a3b8" }}>
+                    <th style={{ padding: "8px 12px" }}>Depth Range (m MD)</th>
+                    <th style={{ padding: "8px 12px" }}>Mud System</th>
+                    <th style={{ padding: "8px 12px" }}>Density (kg/m³)</th>
+                    <th style={{ padding: "8px 12px" }}>Density (ppg)</th>
+                    <th style={{ padding: "8px 12px" }}>Rheology / Additives</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mudData.mud_intervals.map((interval) => (
+                    <tr key={interval.id} style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.1)" }}>
+                      <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
+                        {interval.interval_top_md_m ?? 0} – {interval.interval_base_md_m ?? "TD"} m
+                      </td>
+                      <td style={{ padding: "8px 12px", color: "var(--teal, #38b2ac)", fontWeight: 600 }}>
+                        {interval.mud_type}
+                      </td>
+                      <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)" }}>
+                        {interval.mud_density_kg_m3 != null ? `${interval.mud_density_kg_m3} kg/m³` : "—"}
+                      </td>
+                      <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)", color: "#68d391" }}>
+                        {interval.mud_density_ppg != null ? `${interval.mud_density_ppg} ppg` : "—"}
+                      </td>
+                      <td style={{ padding: "8px 12px", color: "#cbd5e0" }}>
+                        {interval.rheology_notes ?? "Standard rheology profile"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Modal */}
+      {showAddModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface-elevated, #16202c)",
+              border: "1px solid rgba(120, 140, 160, 0.3)",
+              borderRadius: "8px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "520px",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.1rem" }}>
+                Add {activeTab === "casing" ? "Casing & Cementing String" : "Mud Program Interval"}
+              </h3>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setShowAddModal(false)}
+                style={{ fontSize: "1.2rem", padding: "4px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {activeTab === "casing" ? (
+              <form onSubmit={handleAddCasing} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Casing Type
+                  </label>
+                  <select
+                    value={casingType}
+                    onChange={(e) => setCasingType(e.target.value)}
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  >
+                    <option value="conductor">Conductor Casing</option>
+                    <option value="surface">Surface Casing</option>
+                    <option value="intermediate">Intermediate Casing</option>
+                    <option value="production">Production Casing</option>
+                    <option value="liner">Production Liner</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Shoe Depth (m MD)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={casingDepth}
+                      onChange={(e) => setCasingDepth(e.target.value)}
+                      placeholder="e.g. 1850"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Casing OD (metres)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={casingDia}
+                      onChange={(e) => setCasingDia(e.target.value)}
+                      placeholder="e.g. 0.2445 (9 5/8 in)"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Hole Size (metres)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={holeDia}
+                      onChange={(e) => setHoleDia(e.target.value)}
+                      placeholder="e.g. 0.311 (12 1/4 in)"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Cement Volume (m³)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={cementVol}
+                      onChange={(e) => setCementVol(e.target.value)}
+                      placeholder="e.g. 28.5"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Slurry Type
+                    </label>
+                    <input
+                      type="text"
+                      value={cementType}
+                      onChange={(e) => setCementType(e.target.value)}
+                      placeholder="Class G + 2% CaCl2"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Recorded Outcome
+                    </label>
+                    <select
+                      value={recordedOutcome}
+                      onChange={(e) => setRecordedOutcome(e.target.value)}
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    >
+                      <option value="good_returns">Good Returns to Surface</option>
+                      <option value="partial_losses">Partial Losses During Job</option>
+                      <option value="total_losses">Total Losses / Squeeze Required</option>
+                      <option value="completed_normal">Completed Normal</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+                  <button type="button" className="text-button" onClick={() => setShowAddModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="plan-apply-btn" disabled={submitting}>
+                    {submitting ? "Saving..." : "Save Casing String"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleAddMud} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Interval Top (m MD)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={mudTop}
+                      onChange={(e) => setMudTop(e.target.value)}
+                      placeholder="e.g. 500"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Interval Base (m MD)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={mudBase}
+                      onChange={(e) => setMudBase(e.target.value)}
+                      placeholder="e.g. 1850"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Mud System
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={mudType}
+                      onChange={(e) => setMudType(e.target.value)}
+                      placeholder="e.g. Poly-Glycol WBM"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                      Density (kg/m³)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={mudDensity}
+                      onChange={(e) => setMudDensity(e.target.value)}
+                      placeholder="e.g. 1180"
+                      style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Rheology & Additives Notes
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={rheologyNotes}
+                    onChange={(e) => setRheologyNotes(e.target.value)}
+                    placeholder="e.g. PV 18 cP, YP 24 lb/100ft², 5% KCl, Glycol 3% for Barail shale inhibition"
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+                  <button type="button" className="text-button" onClick={() => setShowAddModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="plan-apply-btn" disabled={submitting}>
+                    {submitting ? "Saving..." : "Save Mud Interval"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ReservoirProperty = {
+  id: string;
+  formation_interval_id: string;
+  formation_name: string;
+  property_type: string;
+  value: number | null;
+  unit: string;
+  top_md_m: number | null;
+  base_md_m: number | null;
+};
+
+type ReservoirPropertiesResponse = {
+  wellbore_id: string;
+  reservoir_properties: ReservoirProperty[];
+};
+
+export function ReservoirPropertiesPanel({ token, wellboreId }: { token: string; wellboreId: string }) {
+  const [data, setData] = useState<ReservoirPropertiesResponse | null>(null);
+  const [intervals, setIntervals] = useState<{ id: string; name: string; top_md_m: number; base_md_m: number | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form state
+  const [intervalId, setIntervalId] = useState("");
+  const [propType, setPropType] = useState("porosity");
+  const [value, setValue] = useState("");
+  const [unit, setUnit] = useState("%");
+  const [topMd, setTopMd] = useState("");
+  const [baseMd, setBaseMd] = useState("");
+
+  const refreshData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resProps, depthData] = await Promise.all([
+        get<ReservoirPropertiesResponse>(token, `/wellbores/${wellboreId}/reservoir-properties`),
+        get<DepthTrackData>(token, `/wellbores/${wellboreId}/depth-track`),
+      ]);
+      setData(resProps);
+      setIntervals(depthData.intervals);
+      if (depthData.intervals.length > 0 && !intervalId) {
+        setIntervalId(depthData.intervals[0].id);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, [token, wellboreId]);
+
+  const handlePropTypeChange = (type: string) => {
+    setPropType(type);
+    if (type === "porosity") setUnit("%");
+    else if (type === "permeability") setUnit("mD");
+    else if (type === "pore_pressure") setUnit("ppg");
+    else if (type === "fracture_gradient") setUnit("ppg");
+    else if (type === "water_saturation") setUnit("%");
+  };
+
+  const handleAddProperty = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!intervalId) {
+      alert("Please select a target formation interval");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await fetch(`/api/v1/wellbores/${wellboreId}/reservoir-properties`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          formation_interval_id: intervalId,
+          property_type: propType,
+          value: value ? Number(value) : null,
+          unit: unit,
+          top_md_m: topMd ? Number(topMd) : null,
+          base_md_m: baseMd ? Number(baseMd) : null,
+        }),
+      });
+      setShowAddModal(false);
+      setValue("");
+      setTopMd("");
+      setBaseMd("");
+      await refreshData();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const properties = data?.reservoir_properties ?? [];
+
+  // Summary statistics
+  const porosities = properties.filter((p) => p.property_type === "porosity" && p.value != null).map((p) => p.value!);
+  const avgPorosity = porosities.length ? (porosities.reduce((a, b) => a + b, 0) / porosities.length).toFixed(1) : null;
+
+  const permeabilities = properties.filter((p) => p.property_type === "permeability" && p.value != null).map((p) => p.value!);
+  const maxPerm = permeabilities.length ? Math.max(...permeabilities).toFixed(1) : null;
+
+  const pressures = properties.filter((p) => p.property_type === "pore_pressure" && p.value != null).map((p) => p.value!);
+  const maxPressure = pressures.length ? Math.max(...pressures).toFixed(2) : null;
+
+  return (
+    <section className="explore-panel reservoir-properties-panel" aria-label="Reservoir and geological properties">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Data Source V · Subsurface Reservoir Data</p>
+          <h2>Reservoir Properties & Formation Physics</h2>
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <span className="mono-sm" style={{ color: "#94a3b8" }}>
+            {properties.length} Reviewed Parameter{properties.length === 1 ? "" : "s"}
+          </span>
+          <button
+            className="secondary-button"
+            onClick={() => setShowAddModal(true)}
+            style={{ padding: "4px 10px", fontSize: "0.75rem", borderRadius: "4px" }}
+          >
+            + Add Property
+          </button>
+        </div>
+      </div>
+
+      <p className="footnote">
+        Petrophysical and geomechanical data (porosity, permeability, pore pressure gradients, fluid regime) from well completion reports and core/log evaluations.
+        Directly contextualizes kicks, differential sticking, and formation breakdown risks.
+      </p>
+
+      {error && <p className="error" role="alert">{error}</p>}
+      {loading && <p role="status">Loading reservoir parameters…</p>}
+
+      {!loading && (
+        <>
+          {/* Summary KPI Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+            <div style={{ background: "rgba(10, 16, 26, 0.7)", border: "1px solid rgba(56, 178, 172, 0.3)", borderRadius: "6px", padding: "12px" }}>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block" }}>Avg Reservoir Porosity (φ)</span>
+              <strong style={{ fontSize: "1.4rem", color: "#38b2ac" }}>{avgPorosity ? `${avgPorosity}%` : "—"}</strong>
+              <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>Core / log average</small>
+            </div>
+            <div style={{ background: "rgba(10, 16, 26, 0.7)", border: "1px solid rgba(49, 130, 206, 0.3)", borderRadius: "6px", padding: "12px" }}>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block" }}>Max Permeability (k)</span>
+              <strong style={{ fontSize: "1.4rem", color: "#63b3ed" }}>{maxPerm ? `${maxPerm} mD` : "—"}</strong>
+              <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>Target pay zones</small>
+            </div>
+            <div style={{ background: "rgba(10, 16, 26, 0.7)", border: "1px solid rgba(237, 137, 54, 0.3)", borderRadius: "6px", padding: "12px" }}>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block" }}>Peak Pore Pressure</span>
+              <strong style={{ fontSize: "1.4rem", color: "#fbd38d" }}>{maxPressure ? `${maxPressure} ppg` : "—"}</strong>
+              <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>Hydrostatic / overpressure</small>
+            </div>
+            <div style={{ background: "rgba(10, 16, 26, 0.7)", border: "1px solid rgba(120, 140, 160, 0.2)", borderRadius: "6px", padding: "12px" }}>
+              <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block" }}>Target Formations</span>
+              <strong style={{ fontSize: "1.4rem", color: "#e2e8f0" }}>{intervals.length}</strong>
+              <small style={{ display: "block", color: "#64748b", marginTop: "2px" }}>Correlated stratigraphy</small>
+            </div>
+          </div>
+
+          {/* Properties Table */}
+          {properties.length === 0 ? (
+            <p className="notice">
+              No reservoir properties documented for this wellbore yet. Click "+ Add Property" to record porosity, permeability, or pressure data.
+            </p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem", textAlign: "left" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.2)", color: "#94a3b8" }}>
+                    <th style={{ padding: "8px 12px" }}>Formation</th>
+                    <th style={{ padding: "8px 12px" }}>Property</th>
+                    <th style={{ padding: "8px 12px" }}>Measured Value</th>
+                    <th style={{ padding: "8px 12px" }}>Unit</th>
+                    <th style={{ padding: "8px 12px" }}>Depth Range (m MD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {properties.map((p) => {
+                    const badgeColor =
+                      p.property_type === "porosity"
+                        ? { bg: "rgba(56, 178, 172, 0.2)", fg: "#38b2ac" }
+                        : p.property_type === "permeability"
+                        ? { bg: "rgba(49, 130, 206, 0.2)", fg: "#63b3ed" }
+                        : p.property_type === "pore_pressure"
+                        ? { bg: "rgba(237, 137, 54, 0.2)", fg: "#fbd38d" }
+                        : { bg: "rgba(160, 174, 192, 0.2)", fg: "#cbd5e0" };
+
+                    return (
+                      <tr key={p.id} style={{ borderBottom: "1px solid rgba(120, 140, 160, 0.1)" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: 600, color: "#f1f5f9" }}>
+                          {p.formation_name}
+                        </td>
+                        <td style={{ padding: "8px 12px" }}>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontSize: "0.75rem",
+                              background: badgeColor.bg,
+                              color: badgeColor.fg,
+                              fontWeight: 600,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.03em",
+                            }}
+                          >
+                            {human(p.property_type)}
+                          </span>
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, fontSize: "0.9rem", color: "#fff" }}>
+                          {p.value != null ? p.value : "—"}
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)", color: "#a0aec0" }}>
+                          {p.unit}
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono, monospace)", color: "#cbd5e0" }}>
+                          {p.top_md_m != null ? `${p.top_md_m} – ${p.base_md_m ?? "TD"} m` : "Interval-wide"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Add Modal */}
+      {showAddModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface-elevated, #16202c)",
+              border: "1px solid rgba(120, 140, 160, 0.3)",
+              borderRadius: "8px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "500px",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Record Verified Reservoir Property</h3>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setShowAddModal(false)}
+                style={{ fontSize: "1.2rem", padding: "4px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddProperty} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                  Target Formation Interval
+                </label>
+                <select
+                  required
+                  value={intervalId}
+                  onChange={(e) => setIntervalId(e.target.value)}
+                  style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                >
+                  <option value="">Select formation interval...</option>
+                  {intervals.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.name} ({inv.top_md_m} – {inv.base_md_m ?? "TD"} m MD)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Property Type
+                  </label>
+                  <select
+                    value={propType}
+                    onChange={(e) => handlePropTypeChange(e.target.value)}
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  >
+                    <option value="porosity">Porosity (φ)</option>
+                    <option value="permeability">Permeability (k)</option>
+                    <option value="pore_pressure">Pore Pressure (Pp)</option>
+                    <option value="fracture_gradient">Fracture Gradient (FG)</option>
+                    <option value="water_saturation">Water Saturation (Sw)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    placeholder="%, mD, ppg, etc."
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                  Measured Value
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="e.g. 18.5"
+                  style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Top Depth (m MD, optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={topMd}
+                    onChange={(e) => setTopMd(e.target.value)}
+                    placeholder="e.g. 1820"
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px", color: "#94a3b8" }}>
+                    Base Depth (m MD, optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={baseMd}
+                    onChange={(e) => setBaseMd(e.target.value)}
+                    placeholder="e.g. 1850"
+                    style={{ width: "100%", padding: "8px", borderRadius: "4px", background: "#0d131c", border: "1px solid #2d3748", color: "#fff" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+                <button type="button" className="text-button" onClick={() => setShowAddModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="plan-apply-btn" disabled={submitting}>
+                  {submitting ? "Saving..." : "Save Reservoir Property"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

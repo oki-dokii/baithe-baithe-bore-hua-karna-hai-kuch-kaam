@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import IndiaWellMap, { MapWell } from "./IndiaMap";
+import ErtmacFeedWidget from "./ErtmacFeedWidget";
 
 type Session = {
   id: string;
@@ -321,6 +322,7 @@ export default function Operations({
   const [advisoryCap, setAdvisoryCap] = useState("3");
   const [mapWells, setMapWells] = useState<{ active: MapWell; candidates: MapWell[] } | null>(null);
   const [showMapLocator, setShowMapLocator] = useState(true);
+  const [isLiveFeed, setIsLiveFeed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -498,13 +500,18 @@ export default function Operations({
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
-          <span className="badge badge-simulated">SIMULATED · NOT LIVE eRTMAC</span>
+          <span className={isLiveFeed ? "badge badge-live" : "badge badge-simulated"}>
+            {isLiveFeed ? "● LIVE eRTMAC ACTIVE" : "SIMULATED · NOT LIVE eRTMAC"}
+          </span>
           {offline && <span className="badge badge-error">Offline</span>}
         </div>
       </div>
 
       <div className="workspace-body">
         {error && <div className="error-msg" role="alert">{error}</div>}
+
+        {/* Live eRTMAC Feed & WITSML Ingestion */}
+        <ErtmacFeedWidget token={token} onStatusChange={setIsLiveFeed} />
 
         {/* Replay controls */}
         <div className="replay-panel">
