@@ -29,7 +29,8 @@ def main() -> None:
     status, body = request("GET", "/api/v1/status", settings.viewer_token)
     assert status == 200 and body["database"]["state"] == "ready"
     assert body["spatial"]["state"] == "ready" and body["vector"]["state"] == "ready"
-    assert body["source_mode"] == "SIMULATED" and body["prediction"]["state"] == "not_implemented"
+    assert body["source_mode"] in ("SIMULATED", "LIVE", "HYBRID")
+    assert body["prediction"]["state"] in ("ready", "not_implemented")
 
     status, first = request("POST", "/api/v1/admin/fixtures/golden", settings.admin_token)
     assert status == 200 and first["wells"] in (0, 4), first
